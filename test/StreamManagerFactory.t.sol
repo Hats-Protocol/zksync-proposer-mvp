@@ -2,14 +2,14 @@
 pragma solidity ^0.8.19;
 
 import { Test, console2, Vm } from "forge-std/Test.sol";
-import { AgreementEligibility } from "../src/AgreementEligibility.sol";
-import { AgreementEligibilityFactory } from "../src/AgreementEligibilityFactory.sol";
+import { StreamManager } from "../src/StreamManager.sol";
+import { StreamManagerFactory } from "../src/StreamManagerFactory.sol";
 
 contract TestMultiClaimsHatterFactory is Test {
-  AgreementEligibilityFactory factory;
+  StreamManagerFactory factory;
 
   function setUp() public {
-    factory = new AgreementEligibilityFactory();
+    factory = new StreamManagerFactory();
   }
 
   function testFuzz_deployAgreementEligibilty(uint256 _hatId, address _hat, uint256 _saltNonce) public {

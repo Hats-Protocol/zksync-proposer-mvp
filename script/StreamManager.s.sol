@@ -2,12 +2,12 @@
 pragma solidity ^0.8.18;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { AgreementEligibility } from "../src/AgreementEligibility.sol";
+import { StreamManager } from "../src/StreamManager.sol";
 
 contract Deploy is Script {
   address public implementation;
   bytes32 public SALT = bytes32(abi.encode(0x4a75)); // "hats"
-
+  
   // default values
   bool private verbose = true;
   string private version = "0.2.0"; // increment with each deployment

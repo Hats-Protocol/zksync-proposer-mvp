@@ -10,3 +10,6 @@
 [submodule "lib/multi-claims-hatter"]
 	path = lib/multi-claims-hatter
 	url = https://github.com/alexkeating/multi-claims-hatter
+[submodule "lib/agreement-eligibility"]
+	path = lib/agreement-eligibility
+	url = https://github.com/alexkeating/agreement-eligibility
