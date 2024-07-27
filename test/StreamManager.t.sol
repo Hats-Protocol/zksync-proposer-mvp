@@ -10,14 +10,12 @@ import {
   AgreementEligibility_NotArbitrator,
   AgreementEligibility_HatNotMutable
 } from "../src/AgreementEligibility.sol";
+import { AgreementEligibilityFactory } from "src/AgreementEligibilityFactory.sol";
 import { Deploy } from "../script/AgreementEligibility.s.sol";
-import {
-  IHats,
-  HatsModuleFactory,
-  deployModuleFactory,
-  deployModuleInstance
-} from "lib/hats-module/src/utils/DeployFunctions.sol";
 import { MultiClaimsHatter } from "multi-claims-hatter/MultiClaimsHatter.sol";
+import { MultiClaimsHatterFactory } from "multi-claims-hatter/MultiClaimsHatterFactory.sol";
+import { IHats } from "hats-protocol/Interfaces/IHats.sol";
+import { Hats } from "hats-protocol/Hats.sol";
 
 contract AgreementEligibilityTest is Deploy, Test {
   // variables inhereted from Deploy script
@@ -26,10 +24,13 @@ contract AgreementEligibilityTest is Deploy, Test {
 
   uint256 public fork;
   uint256 public BLOCK_NUMBER = 18_265_713;
-  IHats public constant HATS = IHats(0x3bc1A0Ad72417f2d411118085256fC53CBdDd137); // v1.hatsprotocol.eth
+  string internal constant x = "Hats Protocol v1";
+  string internal constant y = "";
+  IHats public HATS = new Hats{ salt: bytes32(abi.encode(0x4a75)) }(x, y); // v1.hatsprotocol.eth
+  uint256 saltNonce = 1;
 
   string public FACTORY_VERSION = "factory test version";
-  string public MODULE_VERSION = "module test version";
+  string public MODULE_VERSION = "0.6.0-zksync";
 
   event AgreementEligibility_HatClaimedWithAgreement(address claimer, uint256 hatId, string agreement);
   event AgreementEligibility_AgreementSigned(address signer, string agreement);
@@ -37,14 +38,7 @@ contract AgreementEligibilityTest is Deploy, Test {
   event AgreementEligibility_OwnerHatSet(uint256 newOwnerHat);
   event AgreementEligibility_ArbitratorHatSet(uint256 newArbitratorHat);
 
-  function setUp() public virtual {
-    // create and activate a fork, at BLOCK_NUMBER
-    fork = vm.createSelectFork(vm.rpcUrl("mainnet"), BLOCK_NUMBER);
-
-    // deploy via the script
-    Deploy.prepare(false, MODULE_VERSION); // set first param to true to log deployment addresses
-    Deploy.run();
-  }
+  function setUp() public virtual { }
 }
 
 contract WithInstanceTest is AgreementEligibilityTest {
@@ -54,7 +48,6 @@ contract WithInstanceTest is AgreementEligibilityTest {
     ClaimableFor
   }
 
-  HatsModuleFactory public factory;
   AgreementEligibility public instance;
   MultiClaimsHatter public claimsHatter;
 
@@ -89,9 +82,8 @@ contract WithInstanceTest is AgreementEligibilityTest {
     // encoded the initData as unpacked bytes
     initData = abi.encode(_ownerHat, _arbitratorHat, _agreement);
     // deploy the instance
-    return AgreementEligibility(
-      deployModuleInstance(factory, address(implementation), _claimableHat, otherImmutableArgs, initData)
-    );
+    AgreementEligibilityFactory factory = new AgreementEligibilityFactory();
+    return AgreementEligibility(factory.deployModule(_claimableHat, address(HATS), initData, saltNonce));
   }
 
   function deployMultiClaimsHatterInstance(
@@ -101,18 +93,14 @@ contract WithInstanceTest is AgreementEligibilityTest {
   ) public returns (MultiClaimsHatter) {
     // encoded the initData as unpacked bytes
     initData = abi.encode(_claimableHats, _claimTypes);
+    MultiClaimsHatterFactory factory = new MultiClaimsHatterFactory();
     // deploy the instance
-    return MultiClaimsHatter(
-      deployModuleInstance(factory, address(0xB985eA1be961f7c4A4C45504444C02c88c4fdEF9), _hatId, "", initData)
-    );
+    return MultiClaimsHatter(factory.deployModule(_hatId, address(HATS), initData, saltNonce));
   }
 
   function setUp() public virtual override {
     super.setUp();
     gracePeriod = 7 days;
-
-    // deploy the hats module factory
-    factory = deployModuleFactory(HATS, SALT, FACTORY_VERSION);
 
     // set up hats
     tophat = HATS.mintTopHat(dao, "tophat", "dao.eth/tophat");
@@ -150,7 +138,7 @@ contract Deployment is WithInstanceTest {
   }
 
   function test_implementation() public {
-    assertEq(address(instance.IMPLEMENTATION()), address(implementation));
+    assertEq(address(instance.IMPLEMENTATION()), address(instance));
   }
 
   function test_hats() public {

@@ -4,3 +4,24 @@ optimized-out/
 .vscode/
 broadcast/
 .env
+
+
+# Hardhat files
+/cache
+/artifacts
+
+# TypeChain files
+/typechain
+/typechain-types
+
+# solidity-coverage files
+/coverage
+/coverage.json
+
+# zksync build artifacts
+/artifacts-zk
+/cache-zk
+
+# zksync local node logs
+era_test_node.log
+/node_modules
