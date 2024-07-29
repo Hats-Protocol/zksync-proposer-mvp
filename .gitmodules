@@ -10,12 +10,3 @@
 [submodule "lib/multi-claims-hatter"]
 	path = lib/multi-claims-hatter
 	url = https://github.com/alexkeating/multi-claims-hatter
-[submodule "lib/v2-core"]
-	path = lib/v2-core
-	url = https://github.com/sablier-labs/v2-core
-[submodule "lib/openzeppelin-contracts"]
-	path = lib/openzeppelin-contracts
-	url = https://github.com/OpenZeppelin/openzeppelin-contracts
-[submodule "lib/prb-math"]
-	path = lib/prb-math
-	url = https://github.com/PaulRBerg/prb-math

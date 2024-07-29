@@ -17,6 +17,8 @@ import { MultiClaimsHatterFactory } from "multi-claims-hatter/MultiClaimsHatterF
 import { IHats } from "hats-protocol/Interfaces/IHats.sol";
 import { Hats } from "hats-protocol/Hats.sol";
 
+// TODO all tests
+
 contract AgreementEligibilityTest is Deploy, Test {
   // variables inhereted from Deploy script
   // address public implementation;
