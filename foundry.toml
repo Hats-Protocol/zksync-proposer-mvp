@@ -13,7 +13,7 @@
     "hats-module/=lib/hats-module/src/",
     "multi-claims-hatter/=lib/multi-claims-hatter/src/",
   ]
-  solc = "0.8.19"
+  solc = "0.8.22"
   # Enable tests to read ir-optimized bytecode precompiled by profile.optimized
   fs_permissions = [{ access = "read", path = "./optimized-out" }]
 

@@ -2,19 +2,13 @@
 pragma solidity ^0.8.19;
 
 // import { console2 } from "forge-std/Test.sol"; // remove before deploy
-import { IERC20 } from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"; // replace with ZK token
-import { ud60x18 } from "../lib/prb-math/src/UD60x18.sol";
-import { ISablierV2LockupLinear } from "../lib/v2-core/src/interfaces/ISablierV2LockupLinear.sol";
-import { Broker, LockupLinear } from "../lib/v2-core/src/types/DataTypes.sol";
+import { IERC20, IZkTokenV2 } from "./lib/IZkTokenV2.sol";
+import { ud60x18 } from "@prb/math/src/UD60x18.sol";
+import { ISablierV2LockupLinear } from "@sablier/v2-core/src/interfaces/ISablierV2LockupLinear.sol";
+import { Broker, LockupLinear } from "@sablier/v2-core/src/types/DataTypes.sol";
 import { IHats } from "../lib/hats-protocol/src/interfaces/IHats.sol";
 
 // TODO improve imports and remappings
-
-// TODO move this interface to its own file
-interface IZTokenV2 is IERC20 {
-  function grantRole(bytes32 role, address account) external;
-  function mint(address _to, uint256 _amount) external;
-}
 
 /**
  * @title StreamManager
@@ -69,8 +63,10 @@ contract StreamManager {
     uint256 _recipientHat,
     uint256 _cancellerHat
   ) {
-    totalAmount = _totalAmount;
+    HATS = _hats;
     ZK = IERC20(_zk);
+    LOCKUP_LINEAR = _lockupLinear;
+    totalAmount = _totalAmount;
     recipient = _recipient;
     cliff = _cliff;
     totalDuration = _totalDuration;
@@ -98,7 +94,7 @@ contract StreamManager {
 
   /// @dev For this function to work, the sender must have approved this dummy contract to spend DAI.
   function createStream() public onlyRecipient returns (uint256 _streamId) {
-    // mint the ZK tokens
+    // mint the ZK tokens to this contract
     _mintTokens(totalAmount);
 
     // Approve the Sablier contract to spend ZK
@@ -143,6 +139,6 @@ contract StreamManager {
   //////////////////////////////////////////////////////////////*/
 
   function _mintTokens(uint256 _amount) internal {
-    // TODO
+    IZkTokenV2(address(ZK)).mint(address(this), _amount);
   }
 }

@@ -11,3 +11,6 @@ solbase/=lib/hats-protocol/lib/solbase/src/
 solmate/=lib/hats-module/lib/solady/lib/solmate/src/
 utils/=lib/hats-protocol/lib/utils/
 multi-claims-hatter/=lib/multi-claims-hatter/src/
+@sablier/v2-core=node_modules/@sablier/v2-core/
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
+@prb/math/=node_modules/@prb/math/

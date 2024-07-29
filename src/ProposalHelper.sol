@@ -2,15 +2,15 @@
 pragma solidity ^0.8.19;
 
 // import { console2 } from "forge-std/Test.sol"; // remove before deploy
-import { IHats } from "../lib/hats-protocol/src/Interfaces/IHats.sol";
 import { IHatsModuleFactory } from "../lib/hats-module/src/interfaces/IHatsModuleFactory.sol";
+import { IMultiClaimsHatter, ClaimType } from "./lib/IMultiClaimsHatter.sol";
 import { IHatsSignerGateFactory } from "./lib/IHatsSignerGateFactory.sol";
-import { StreamManager, ISablierV2LockupLinear, IZTokenV2 } from "./StreamManager.sol";
+import { StreamManager, IHats, ISablierV2LockupLinear, IZkTokenV2 } from "./StreamManager.sol";
 
 /**
  * @title ProposalHelper
  * @author Haberdasher Labs
- * @notice TODO
+ * @notice // TODO
  */
 contract ProposalHelper {
   /*//////////////////////////////////////////////////////////////
@@ -30,10 +30,14 @@ contract ProposalHelper {
     uint40 _totalDuration;
   }
 
-  enum ClaimType {
-    NotClaimable,
-    Claimable,
-    ClaimableFor
+  struct GrantConfig {
+    string name;
+    string image;
+    string agreement;
+    uint256 amount;
+    uint256 accountabilityJudgeHat;
+    uint256 kycManagerHat;
+    StreamConfig streamConfig;
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -85,34 +89,24 @@ contract ProposalHelper {
   }
 
   /*//////////////////////////////////////////////////////////////
-                            INITIALIZER
-  //////////////////////////////////////////////////////////////*/
-
-  /*//////////////////////////////////////////////////////////////
                           PUBLIC FUNCTIONS
   //////////////////////////////////////////////////////////////*/
 
   /// $ZK token minting governor execution delegatecalls this contract, which executes the following on the governor’s
   /// behalf
-  function createGrant(
-    string memory _name,
-    string memory _image,
-    string memory _agreement,
-    uint256 _amount,
-    uint256 _accountabilityJudgeHat,
-    uint256 _kycManagerHat,
-    StreamConfig calldata _streamConfig
-  ) external returns (uint256 _recipientHat) {
+  function createGrant(GrantConfig calldata _grant) external returns (uint256 recipientHat) {
     // get the id of the next recipient hat
-    uint256 recipientHat = hats.getNextId(recipientBranchRoot);
+    recipientHat = hats.getNextId(recipientBranchRoot);
 
     // deploy agreement eligibility module
-    address agreementEligibilityModule =
-      _deployAgreementEligibilityModule(recipientHat, _accountabilityJudgeHat, _agreement);
+    // TODO what hat should be the agreement eligibility module owner?
+    address agreementEligibilityModule = _deployAgreementEligibilityModule(
+      recipientHat, _grant.accountabilityJudgeHat, _grant.accountabilityJudgeHat, _grant.agreement
+    );
 
     // deploy KYC eligibility module
     address kycEligibilityModule =
-      _deployAllowlistEligibilityModule(recipientHat, _kycManagerHat, _accountabilityJudgeHat);
+      _deployAllowlistEligibilityModule(recipientHat, _grant.kycManagerHat, _grant.accountabilityJudgeHat);
 
     // deploy chaining eligibility module
     address chainingEligibilityModule =
@@ -122,12 +116,12 @@ contract ProposalHelper {
     if (
       hats.createHat(
         recipientBranchRoot, // admin
-        _grantName, // details
+        _grant.name, // details
         1, // maxSupply
         chainingEligibilityModule,
         address(0x4a75), // no need for toggle
         true, // mutable
-        _image // imageURI
+        _grant.image // imageURI
       ) != recipientHat
     ) {
       revert WrongRecipientHatId();
@@ -137,13 +131,15 @@ contract ProposalHelper {
     multiClaimsHatter.setHatClaimability(recipientHat, ClaimType.ClaimableFor);
 
     // deploy recipient Safe gated to recipientHat
-    address recipientSafe = _deployHSGAndSafe(recipientHat, 1 /* TODO */ );
+    // TODO what hat should be the HSG owner?
+    address recipientSafe = _deployHSGAndSafe(recipientHat, _grant.accountabilityJudgeHat);
 
     // deploy streaming manager contract
-    address streamingManager = _deployStreamManager(recipientHat, _accountabilityJudgeHat, recipientSafe, _streamConfig);
+    address streamingManager =
+      _deployStreamManager(recipientHat, _grant.accountabilityJudgeHat, recipientSafe, _grant.streamConfig);
 
     // authorize streaming manager contract to mint $ZK tokens
-    IZTokenV2(zk).grantRole(keccak256("MINTER_ROLE"), streamingManager);
+    IZkTokenV2(zk).grantRole(keccak256("MINTER_ROLE"), streamingManager);
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -157,7 +153,7 @@ contract ProposalHelper {
     string memory _agreement
   ) internal returns (address _module) {
     bytes memory initData = abi.encode(_ownerHat, _arbitratorHat, _agreement);
-    return agreementEligibilityFactory.createModule(_hatId, hats, initData, SALT_NONCE);
+    return agreementEligibilityFactory.deployModule(_hatId, address(hats), initData, SALT_NONCE);
   }
 
   function _deployAllowlistEligibilityModule(uint256 _hatId, uint256 _ownerHat, uint256 _arbitratorHat)
@@ -165,7 +161,7 @@ contract ProposalHelper {
     returns (address _module)
   {
     bytes memory initData = abi.encode(_ownerHat, _arbitratorHat);
-    return allowlistEligibilityFactory.createModule(_hatId, hats, initData, SALT_NONCE);
+    return allowlistEligibilityFactory.deployModule(_hatId, address(hats), initData, SALT_NONCE);
   }
 
   function _deployChainingEligibilityModule(
@@ -179,11 +175,11 @@ contract ProposalHelper {
       _agreementEligibilityModule,
       _kycEligibilityModule
     );
-    return chainingEligibilityFactory.createModule(_hatId, hats, initData, SALT_NONCE);
+    return chainingEligibilityFactory.deployModule(_hatId, address(hats), initData, SALT_NONCE);
   }
 
   function _deployHSGAndSafe(uint256 _signersHatId, uint256 _ownerHatId) internal returns (address) {
-    (, address safe) = _hatsSignerGateFactory.deployHatsSignerGateAndSafe(
+    (, address safe) = hatsSignerGateFactory.deployHatsSignerGateAndSafe(
       _signersHatId,
       _ownerHatId,
       1, // minThreshold
