@@ -2,629 +2,288 @@
 
 pragma solidity ^0.8.18;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test, console2 } from "../lib/forge-std/src/Test.sol";
 
-import {
-  AgreementEligibility,
-  AgreementEligibility_NotOwner,
-  AgreementEligibility_NotArbitrator,
-  AgreementEligibility_HatNotMutable
-} from "../src/AgreementEligibility.sol";
-import { AgreementEligibilityFactory } from "src/AgreementEligibilityFactory.sol";
-import { Deploy } from "../script/AgreementEligibility.s.sol";
-import { MultiClaimsHatter } from "multi-claims-hatter/MultiClaimsHatter.sol";
-import { MultiClaimsHatterFactory } from "multi-claims-hatter/MultiClaimsHatterFactory.sol";
-import { IHats } from "hats-protocol/Interfaces/IHats.sol";
-import { Hats } from "hats-protocol/Hats.sol";
+import { StreamManager, NotAuthorized, IHats, ISablierV2LockupLinear, IZkTokenV2 } from "../src/StreamManager.sol";
+import { StreamManagerHarness } from "./harnesses/StreamManagerHarness.sol";
 
-// TODO all tests
-
-contract AgreementEligibilityTest is Deploy, Test {
-  // variables inhereted from Deploy script
-  // address public implementation;
-  // bytes32 public SALT;
-
+contract StreamManagerTest is Test {
+  string public network;
+  uint256 public BLOCK_NUMBER;
   uint256 public fork;
-  uint256 public BLOCK_NUMBER = 18_265_713;
-  string internal constant x = "Hats Protocol v1";
-  string internal constant y = "";
-  IHats public HATS = new Hats{ salt: bytes32(abi.encode(0x4a75)) }(x, y); // v1.hatsprotocol.eth
+
+  // Sepolia Era addresses
+  IHats public HATS = IHats(address(0)); // TODO
+  ISablierV2LockupLinear public LOCKUP_LINEAR = ISablierV2LockupLinear(0x43864C567b89FA5fEE8010f92d4473Bf19169BBA);
+  IZkTokenV2 public ZK = IZkTokenV2(0x69e5DC39E2bCb1C17053d2A4ee7CAEAAc5D36f96);
+  address public ZKTokenGovernor = 0x9F9b6f090AF502c5ffe9d89df13e9DBf83df5Bf7;
   uint256 saltNonce = 1;
 
-  string public FACTORY_VERSION = "factory test version";
-  string public MODULE_VERSION = "0.6.0-zksync";
+  string public VERSION = "0.1.0-zksync";
 
-  event AgreementEligibility_HatClaimedWithAgreement(address claimer, uint256 hatId, string agreement);
-  event AgreementEligibility_AgreementSigned(address signer, string agreement);
-  event AgreementEligibility_AgreementSet(string agreement, uint256 grace);
-  event AgreementEligibility_OwnerHatSet(uint256 newOwnerHat);
-  event AgreementEligibility_ArbitratorHatSet(uint256 newArbitratorHat);
+  // hats
+  uint256 public tophat;
+  uint256 public recipientHat;
+  uint256 public cancellerHat;
+  address public eligibility = makeAddr("eligibility");
+  address public toggle = makeAddr("toggle");
+  address public dao = makeAddr("dao");
 
-  function setUp() public virtual { }
+  // test accounts
+  address public recipient = makeAddr("recipient");
+  address public canceller = makeAddr("canceller");
+  address public nonWearer = makeAddr("nonWearer");
+
+  // stream params
+  uint128 public totalAmount = 1000;
+  uint40 public cliff = 100;
+  uint40 public totalDuration = 1000;
+
+  function setUp() public virtual {
+    network = "sepolia-era"; // TODO add to foundry.toml
+    BLOCK_NUMBER = 3_560_079; // TODO
+    fork = vm.createFork(vm.rpcUrl(network), BLOCK_NUMBER);
+  }
 }
 
-contract WithInstanceTest is AgreementEligibilityTest {
+contract WithInstanceTest is StreamManagerTest {
   enum ClaimType {
     NotClaimable,
     Claimable,
     ClaimableFor
   }
 
-  AgreementEligibility public instance;
-  MultiClaimsHatter public claimsHatter;
+  StreamManager public instance;
 
-  bytes public otherImmutableArgs;
-  bytes public initData;
-
-  uint256 public tophat;
-  uint256 public claimableHat;
-  // owner hat will be the tophat
-  uint256 public arbitratorHat;
-  uint256 public registrarHat;
-  address public eligibility = makeAddr("eligibility");
-  address public toggle = makeAddr("toggle");
-  address public dao = makeAddr("dao");
-  address public arbitrator = makeAddr("arbitrator");
-  address public claimer1 = makeAddr("claimer1");
-  address public claimer2 = makeAddr("claimer2");
-  address public nonWearer = makeAddr("nonWearer");
-
-  string public agreement;
-  uint256 public gracePeriod;
-  uint256 public currentAgreementId;
-
-  function deployAgreementEligibilityInstance(
-    uint256 _claimableHat,
-    uint256 _ownerHat,
-    uint256 _arbitratorHat,
-    string memory _agreement
-  ) public returns (AgreementEligibility) {
-    // encode the other immutable args as packed bytes
-    otherImmutableArgs = abi.encodePacked();
-    // encoded the initData as unpacked bytes
-    initData = abi.encode(_ownerHat, _arbitratorHat, _agreement);
-    // deploy the instance
-    AgreementEligibilityFactory factory = new AgreementEligibilityFactory();
-    return AgreementEligibility(factory.deployModule(_claimableHat, address(HATS), initData, saltNonce));
-  }
-
-  function deployMultiClaimsHatterInstance(
-    uint256 _hatId,
-    uint256[] memory _claimableHats,
-    ClaimType[] memory _claimTypes
-  ) public returns (MultiClaimsHatter) {
-    // encoded the initData as unpacked bytes
-    initData = abi.encode(_claimableHats, _claimTypes);
-    MultiClaimsHatterFactory factory = new MultiClaimsHatterFactory();
-    // deploy the instance
-    return MultiClaimsHatter(factory.deployModule(_hatId, address(HATS), initData, saltNonce));
+  function _deployStreamManagerInstance(
+    uint128 _totalAmount,
+    uint40 _cliff,
+    uint40 _totalDuration,
+    address _recipient,
+    uint256 _recipientHat,
+    uint256 _cancellerHat
+  ) public returns (StreamManager) {
+    return new StreamManager(
+      HATS, address(ZK), LOCKUP_LINEAR, _totalAmount, _cliff, _totalDuration, _recipient, _recipientHat, _cancellerHat
+    );
   }
 
   function setUp() public virtual override {
     super.setUp();
-    gracePeriod = 7 days;
 
     // set up hats
     tophat = HATS.mintTopHat(dao, "tophat", "dao.eth/tophat");
     vm.startPrank(dao);
-    registrarHat = HATS.createHat(tophat, "registrarHat", 1, eligibility, toggle, true, "dao.eth/registrarHat");
-    claimableHat = HATS.createHat(registrarHat, "claimableHat", 50, eligibility, toggle, true, "dao.eth/claimableHat");
-    arbitratorHat = HATS.createHat(tophat, "arbitratorHat", 1, eligibility, toggle, true, "dao.eth/arbitratorHat");
-    HATS.mintHat(arbitratorHat, arbitrator);
+    recipientHat = HATS.createHat(tophat, "recipientHat", 1, eligibility, toggle, true, "dao.eth/recipientHat");
+    cancellerHat = HATS.createHat(tophat, "cancellerHat", 1, eligibility, toggle, true, "dao.eth/cancellerHat");
+    HATS.mintHat(recipientHat, recipient);
+    HATS.mintHat(cancellerHat, canceller);
     vm.stopPrank();
 
-    // deploy an instance of multi calims hatter
-    uint256[] memory claimableHats = new uint256[](1);
-    ClaimType[] memory claimTypes = new ClaimType[](1);
-    claimableHats[0] = claimableHat;
-    claimTypes[0] = ClaimType.ClaimableFor;
-    claimsHatter = deployMultiClaimsHatterInstance(registrarHat, claimableHats, claimTypes);
-    vm.prank(dao);
-    HATS.mintHat(registrarHat, address(claimsHatter));
-
-    // set up initial agreement
-    agreement = "this is the first agreement";
-
     // deploy the instance
-    instance = deployAgreementEligibilityInstance(claimableHat, tophat, arbitratorHat, agreement);
-
-    // set instance as claimableHat's eligibility module
-    vm.prank(dao);
-    HATS.changeHatEligibility(claimableHat, address(instance));
+    instance = _deployStreamManagerInstance(totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat);
   }
 }
 
 contract Deployment is WithInstanceTest {
-  function test_version() public {
-    assertEq(instance.version(), MODULE_VERSION);
+  function test_ZK() public {
+    assertEq(address(instance.ZK()), address(ZK));
   }
 
-  function test_implementation() public {
-    assertEq(address(instance.IMPLEMENTATION()), address(instance));
+  function test_LOCKUP_LINEAR() public {
+    assertEq(address(instance.LOCKUP_LINEAR()), address(LOCKUP_LINEAR));
   }
 
-  function test_hats() public {
+  function test_HATS() public {
     assertEq(address(instance.HATS()), address(HATS));
   }
 
-  function test_claimableHat() public {
-    assertEq(instance.hatId(), claimableHat);
+  function test_totalAmount() public {
+    assertEq(instance.totalAmount(), totalAmount);
   }
 
-  function test_ownerHat() public {
-    assertEq(instance.ownerHat(), tophat);
+  function test_recipient() public {
+    assertEq(instance.recipient(), recipient);
   }
 
-  function test_arbitratorHat() public {
-    assertEq(instance.arbitratorHat(), arbitratorHat);
+  function test_cliff() public {
+    assertEq(instance.cliff(), cliff);
   }
 
-  function test_agreement() public {
-    assertEq(instance.currentAgreement(), agreement);
+  function test_totalDuration() public {
+    assertEq(instance.totalDuration(), totalDuration);
   }
 
-  function test_agreementId() public {
-    assertEq(instance.currentAgreementId(), 1);
+  function test_recipientHat() public {
+    assertEq(instance.recipientHat(), recipientHat);
+  }
+
+  function test_cancellerHat() public {
+    assertEq(instance.cancellerHat(), cancellerHat);
   }
 }
 
-contract SetAgreement is WithInstanceTest {
+contract CreateStream is WithInstanceTest {
+  function _streamAssertions(uint256 stream) internal {
+    // assert that the stream exists and has the correct parameters
+    assertEq(LOCKUP_LINEAR.getSender(stream), address(instance), "incorrect sender");
+    assertEq(LOCKUP_LINEAR.getRecipient(stream), recipient, "incorrect recipient");
+    assertEq(LOCKUP_LINEAR.getDepositedAmount(stream), totalAmount, "incorrect deposited amount");
+    assertEq(address(LOCKUP_LINEAR.getAsset(stream)), address(ZK), "incorrect asset");
+    assertTrue(LOCKUP_LINEAR.isCancelable(stream), "stream is not cancelable");
+    assertTrue(LOCKUP_LINEAR.isTransferable(stream), "stream is not transferable");
+
+    uint256 startTime = LOCKUP_LINEAR.getStartTime(stream);
+    assertEq(startTime, block.timestamp, "incorrect start time");
+    assertEq(LOCKUP_LINEAR.getEndTime(stream), startTime + totalDuration, "incorrect end time");
+    assertEq(LOCKUP_LINEAR.getCliffTime(stream), startTime + cliff, "incorrect cliff time");
+  }
+
+  function test_recipient() public {
+    // create the stream
+    vm.prank(recipient);
+    uint256 stream = instance.createStream();
+
+    // assert that the streamId is correct
+    assertEq(stream, instance.streamId(), "incorrect streamId");
+
+    // assert that the stream exists and has the correct parameters
+    _streamAssertions(stream);
+
+    // assert that tokens were minted to the instance
+    assertEq(ZK.balanceOf(address(instance)), totalAmount);
+  }
+
+  function test_revert_nonRecipient() public {
+    uint256 nextStreamId = LOCKUP_LINEAR.nextStreamId();
+
+    vm.expectRevert(abi.encodeWithSelector(NotAuthorized.selector));
+    vm.prank(nonWearer);
+    instance.createStream();
+
+    // assert that the stream was not created
+    assertFalse(LOCKUP_LINEAR.isStream(nextStreamId));
+
+    // assert that no tokens were minted to the instance
+    assertEq(ZK.balanceOf(address(instance)), 0);
+  }
+}
+
+contract CancelStream is WithInstanceTest {
+  function test_canceller() public {
+    address refundee = dao;
+
+    // create a stream
+    vm.prank(recipient);
+    uint256 stream = instance.createStream();
+    uint256 instanceBalance = ZK.balanceOf(address(instance));
+
+    // cancel the stream
+    vm.prank(canceller);
+    instance.cancelStream(refundee);
+
+    // assert that the stream is cancelled
+    assertTrue(LOCKUP_LINEAR.wasCanceled(stream));
+
+    // assert that the unstreamed tokens are sent to the refundee
+    // since no time has passed, all the tokens are unstreamed
+    assertEq(ZK.balanceOf(refundee), instanceBalance);
+  }
+
+  function test_revert_nonCanceller() public {
+    // create a stream
+    vm.prank(recipient);
+    uint256 stream = instance.createStream();
+
+    // try to cancel the stream as a non-canceller
+    vm.expectRevert(abi.encodeWithSelector(NotAuthorized.selector));
+    vm.prank(nonWearer);
+    instance.cancelStream(dao); // refundee doesn't matter
+
+    // assert that the stream is still active
+    assertFalse(LOCKUP_LINEAR.wasCanceled(stream));
+  }
+}
+
+contract WithHarnessTest is StreamManagerTest {
+  StreamManagerHarness public harness;
+
   function setUp() public virtual override {
     super.setUp();
-    agreement = "this is the new agreement";
-  }
-
-  function test_happy() public {
-    gracePeriod = 20 days;
-
-    vm.expectEmit();
-    emit AgreementEligibility_AgreementSet(agreement, block.timestamp + gracePeriod);
-
-    vm.prank(dao);
-    instance.setAgreement(agreement, gracePeriod);
-
-    assertEq(instance.currentAgreement(), agreement);
-    assertEq(instance.currentAgreementId(), 2);
-    assertEq(instance.graceEndsAt(), block.timestamp + gracePeriod);
-  }
-
-  function test_revert_notOwner() public {
-    gracePeriod = 20 days;
-
-    vm.expectRevert(AgreementEligibility_NotOwner.selector);
-
-    vm.prank(nonWearer);
-    instance.setAgreement(agreement, gracePeriod);
+    harness = new StreamManagerHarness(
+      HATS, address(ZK), LOCKUP_LINEAR, totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat
+    );
   }
 }
 
-contract Claim is WithInstanceTest {
-  function test_happy_1claimer() public {
-    assertTrue(claimsHatter.isClaimableFor(claimableHat), "hat is not claimable for");
+contract _MintTokens is WithHarnessTest {
+  bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    vm.expectEmit();
-    emit AgreementEligibility_HatClaimedWithAgreement(claimer1, claimableHat, agreement);
-
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    assertEq(instance.claimerAgreements(claimer1), 1);
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
+  modifier StreamManagerHasMinterRole() {
+    // set the stream manager as the minter
+    vm.prank(ZKTokenGovernor);
+    ZK.grantRole(MINTER_ROLE, address(harness));
+    _;
   }
 
-  function test_happy_2claimers() public {
-    // first claim
-    vm.expectEmit();
-    emit AgreementEligibility_HatClaimedWithAgreement(claimer1, claimableHat, agreement);
+  function test_minter() public StreamManagerHasMinterRole {
+    // mint some tokens
+    vm.prank(address(harness));
+    ZK.mint(recipient, 1000);
 
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    assertEq(instance.claimerAgreements(claimer1), 1);
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
-
-    // second claim
-    vm.expectEmit();
-    emit AgreementEligibility_HatClaimedWithAgreement(claimer2, claimableHat, agreement);
-
-    vm.prank(claimer2);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    assertEq(instance.claimerAgreements(claimer2), 1);
-    assertTrue(HATS.isWearerOfHat(claimer2, claimableHat));
+    assertEq(ZK.balanceOf(recipient), 1000);
   }
 
-  function test_revert_alreadyWearingHat() public {
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    assertEq(instance.claimerAgreements(claimer1), 1);
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
-
-    // now try again, expecting a revert
+  function test_revert_nonMinter() public {
+    // try to mint tokens as a non-minter
     vm.expectRevert();
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-  }
-
-  function test_revert_notEligible() public {
-    // claim
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // get revoked
-    vm.prank(arbitrator);
-    instance.revoke(claimer1);
-
-    // try to claim again, expected revert because in bad standing
-    vm.prank(claimer1);
-    vm.expectRevert();
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-  }
-}
-
-contract SignAgreement is WithInstanceTest {
-  function test_happy() public {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    assertEq(instance.claimerAgreements(claimer1), 1);
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
-
-    // new agreement is set
-    string memory newAgreement = "this is the new agreement";
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // sign the new agreement
-    vm.expectEmit();
-    emit AgreementEligibility_AgreementSigned(claimer1, newAgreement);
-
-    vm.prank(claimer1);
-    instance.signAgreement();
-
-    assertEq(instance.claimerAgreements(claimer1), 2);
-  }
-
-  function test_afterGracePeriod() public {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    assertEq(instance.claimerAgreements(claimer1), 1);
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
-
-    // new agreement is set
-    string memory newAgreement = "this is the new agreement";
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // warp past the grace period
-    vm.warp(instance.graceEndsAt());
-
-    // not wearing the hat any more
-    assertFalse(HATS.isWearerOfHat(claimer1, claimableHat));
-
-    // sign the new agreement
-    vm.expectEmit();
-    emit AgreementEligibility_AgreementSigned(claimer1, newAgreement);
-
-    vm.prank(claimer1);
-    instance.signAgreement();
-    assertEq(instance.claimerAgreements(claimer1), 2);
-
-    // now wearing the hat again
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
-  }
-}
-
-contract Revoke is WithInstanceTest {
-  function test_happy() public {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // revoke
-    vm.prank(arbitrator);
-    instance.revoke(claimer1);
-
-    assertFalse(instance.wearerStanding(claimer1));
-    assertFalse(HATS.isWearerOfHat(claimer1, claimableHat));
-  }
-
-  function test_revert_notArbitrator() public {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // attempt to revoke from non-arbitrator, expecting revert
     vm.prank(nonWearer);
-    vm.expectRevert(AgreementEligibility_NotArbitrator.selector);
-    instance.revoke(claimer1);
+    ZK.mint(recipient, 1000);
 
-    assertTrue(instance.wearerStanding(claimer1));
-    assertTrue(HATS.isWearerOfHat(claimer1, claimableHat));
+    assertEq(ZK.balanceOf(recipient), 0);
   }
 }
 
-contract Forgive is WithInstanceTest {
-  function test_happy() public {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
+contract _AuthMods is WithHarnessTest {
+  function test_recipientOnly_wearer() public {
+    uint256 preCount = harness.counter();
 
-    // revoke
-    vm.prank(arbitrator);
-    instance.revoke(claimer1);
+    vm.prank(recipient);
+    harness.recipientOnly();
 
-    assertFalse(instance.wearerStanding(claimer1));
-    assertFalse(HATS.isWearerOfHat(claimer1, claimableHat));
-
-    // forgive
-    vm.prank(arbitrator);
-    instance.forgive(claimer1);
-
-    assertTrue(instance.wearerStanding(claimer1));
-    assertFalse(HATS.isWearerOfHat(claimer1, claimableHat));
+    uint256 postCount = harness.counter();
+    assertEq(postCount, preCount + 1);
   }
 
-  function test_revert_notArbitrator() public {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // revoke
-    vm.prank(arbitrator);
-    instance.revoke(claimer1);
-
-    // attempt to forgive from non-arbitrator, expecting revert
-    vm.prank(nonWearer);
-    vm.expectRevert(AgreementEligibility_NotArbitrator.selector);
-    instance.forgive(claimer1);
-
-    assertFalse(instance.wearerStanding(claimer1));
-  }
-}
-
-contract WearerStatus is WithInstanceTest {
-  bool public eligible;
-  bool public standing;
-  string newAgreement = "this is the new agreement";
-
-  function test_claimed() public Eligible goodStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, true);
-    assertEq(standing, true);
-  }
-
-  function test_signedNew() public Eligible goodStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // new agreement is set
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // sign the new agreement
-    vm.prank(claimer1);
-    instance.signAgreement();
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, true);
-    assertEq(standing, true);
-  }
-
-  function test_signedOld_inGracePeriod() public Eligible goodStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // new agreement is set
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // don't sign the new agreement
-    assertEq(instance.claimerAgreements(claimer1), 1);
-
-    // warp to within grace period
-    vm.warp(instance.graceEndsAt() - 1);
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-  }
-
-  function test_signedOld_afterGracePeriod() public notEligible goodStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // new agreement is set
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // don't sign the new agreement
-    assertEq(instance.claimerAgreements(claimer1), 1);
-
-    // warp to after grace period
-    vm.warp(instance.graceEndsAt());
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, false);
-    assertEq(standing, true);
-  }
-
-  function test_signedPrevious_inGracePeriod() public Eligible goodStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // new agreement is set
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // sign the new agreement
-    vm.prank(claimer1);
-    instance.signAgreement();
-    assertEq(instance.claimerAgreements(claimer1), 2);
-
-    // 3rd agreement is set
-    vm.prank(dao);
-    instance.setAgreement("this is the 3rd agreement", gracePeriod);
-
-    // don't sign the 3rd agreement
-    assertEq(instance.claimerAgreements(claimer1), 2);
-
-    // warp to in grace period
-    vm.warp(instance.graceEndsAt() - 1);
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, true);
-    assertEq(standing, true);
-  }
-
-  function test_signedNew_afterGracePeriod() public Eligible goodStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // new agreement is set
-    vm.prank(dao);
-    instance.setAgreement(newAgreement, gracePeriod);
-
-    // sign the new agreement
-    vm.prank(claimer1);
-    instance.signAgreement();
-    assertEq(instance.claimerAgreements(claimer1), 2);
-
-    // warp to after grace period
-    vm.warp(instance.graceEndsAt());
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, true);
-    assertEq(standing, true);
-  }
-
-  function test_revoked() public notEligible badStanding {
-    // claim the hat
-    vm.prank(claimer1);
-    instance.signAgreementAndClaimHat(address(claimsHatter));
-
-    // revoke
-    vm.prank(arbitrator);
-    instance.revoke(claimer1);
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, false);
-    assertEq(standing, false);
-  }
-
-  function test_notClaimed_afterGracePeriod() public notEligible goodStanding {
-    // not claimed
-    assertEq(instance.claimerAgreements(claimer1), 0);
-
-    // warp to after grace period
-    vm.warp(instance.graceEndsAt());
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, false);
-    assertEq(standing, true);
-  }
-
-  function test_notClaimed_inGracePeriod() public notEligible goodStanding {
-    // not claimed
-    assertEq(instance.claimerAgreements(claimer1), 0);
-
-    (eligible, standing) = instance.getWearerStatus(claimer1, 0);
-    assertEq(eligible, false);
-    assertEq(standing, true);
-  }
-
-  modifier notEligible() {
-    _;
-    assertFalse(eligible);
-    assertFalse(HATS.isWearerOfHat(claimer1, claimableHat));
-  }
-
-  modifier Eligible() {
-    _;
-    assertTrue(eligible);
-  }
-
-  modifier badStanding() {
-    _;
-    assertFalse(standing);
-    assertFalse(HATS.isWearerOfHat(claimer1, claimableHat));
-  }
-
-  modifier goodStanding() {
-    _;
-    assertTrue(standing);
-  }
-}
-
-contract SetOwnerHat is WithInstanceTest {
-  function test_owner_mutable() public {
-    uint256 newOwnerHat = 1;
-    vm.expectEmit();
-    emit AgreementEligibility_OwnerHatSet(newOwnerHat);
-
-    vm.prank(dao);
-    instance.setOwnerHat(newOwnerHat);
-  }
-
-  function test_revert_nonOwner_mutable() public {
-    uint256 newOwnerHat = 1;
-    vm.expectRevert(AgreementEligibility_NotOwner.selector);
+  function test_recipientOnly_revert_nonWearer() public {
+    uint256 preCount = harness.counter();
 
     vm.prank(nonWearer);
-    instance.setOwnerHat(newOwnerHat);
+    vm.expectRevert(abi.encodeWithSelector(NotAuthorized.selector));
+    harness.recipientOnly();
+
+    uint256 postCount = harness.counter();
+    assertEq(postCount, preCount);
   }
 
-  function test_revert_owner_immutable() public {
-    uint256 newOwnerHat = 1;
+  function test_cancellerOnly_wearer() public {
+    uint256 preCount = harness.counter();
 
-    vm.prank(dao);
-    HATS.makeHatImmutable(claimableHat);
+    vm.prank(canceller);
+    harness.cancellerOnly();
 
-    vm.expectRevert(AgreementEligibility_HatNotMutable.selector);
-
-    vm.prank(dao);
-    instance.setOwnerHat(newOwnerHat);
-  }
-}
-
-contract SetArbitratorHat is WithInstanceTest {
-  function test_arbitrator_mutable() public {
-    uint256 newArbitratorHat = 1;
-    vm.expectEmit();
-    emit AgreementEligibility_ArbitratorHatSet(newArbitratorHat);
-
-    vm.prank(dao);
-    instance.setArbitratorHat(newArbitratorHat);
+    uint256 postCount = harness.counter();
+    assertEq(postCount, preCount + 1);
   }
 
-  function test_revert_nonOwner_mutable() public {
-    uint256 newArbitratorHat = 1;
-    vm.expectRevert(AgreementEligibility_NotOwner.selector);
+  function test_cancellerOnly_revert_nonWearer() public {
+    uint256 preCount = harness.counter();
 
     vm.prank(nonWearer);
-    instance.setArbitratorHat(newArbitratorHat);
-  }
+    vm.expectRevert(abi.encodeWithSelector(NotAuthorized.selector));
+    harness.cancellerOnly();
 
-  function test_revert_arbitrator_immutable() public {
-    uint256 newArbitratorHat = 1;
-
-    vm.prank(dao);
-    HATS.makeHatImmutable(claimableHat);
-
-    vm.expectRevert(AgreementEligibility_HatNotMutable.selector);
-
-    vm.prank(dao);
-    instance.setArbitratorHat(newArbitratorHat);
+    uint256 postCount = harness.counter();
+    assertEq(postCount, preCount);
   }
 }
