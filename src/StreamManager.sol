@@ -8,7 +8,10 @@ import { ISablierV2LockupLinear } from "@sablier/v2-core/src/interfaces/ISablier
 import { Broker, LockupLinear } from "@sablier/v2-core/src/types/DataTypes.sol";
 import { IHats } from "../lib/hats-protocol/src/interfaces/IHats.sol";
 
-// TODO improve imports and remappings
+/*//////////////////////////////////////////////////////////////
+                            CUSTOM ERRORS
+  //////////////////////////////////////////////////////////////*/
+error NotAuthorized();
 
 /**
  * @title StreamManager
@@ -17,18 +20,14 @@ import { IHats } from "../lib/hats-protocol/src/interfaces/IHats.sol";
  */
 contract StreamManager {
   /*//////////////////////////////////////////////////////////////
-                            CUSTOM ERRORS
-  //////////////////////////////////////////////////////////////*/
-
-  error NotAuthorized();
-
-  /*//////////////////////////////////////////////////////////////
                               EVENTS
   //////////////////////////////////////////////////////////////*/
 
   /*//////////////////////////////////////////////////////////////
                               CONSTANTS
   //////////////////////////////////////////////////////////////*/
+
+  string public constant VERSION = "mvp";
 
   IERC20 public immutable ZK;
   ISablierV2LockupLinear public immutable LOCKUP_LINEAR;
