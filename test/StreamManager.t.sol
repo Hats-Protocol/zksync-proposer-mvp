@@ -2,21 +2,13 @@
 
 pragma solidity ^0.8.18;
 
-import { Test, console2 } from "../lib/forge-std/src/Test.sol";
-
-import { StreamManager, NotAuthorized, IHats, ISablierV2LockupLinear, IZkTokenV2 } from "../src/StreamManager.sol";
+import { console2 } from "../lib/forge-std/src/Test.sol";
+import { BaseTest } from "./Base.t.sol";
+import { StreamManager, NotAuthorized } from "../src/StreamManager.sol";
 import { StreamManagerHarness } from "./harnesses/StreamManagerHarness.sol";
 
-contract StreamManagerTest is Test {
-  string public network;
-  uint256 public BLOCK_NUMBER;
-  uint256 public fork;
-
+contract StreamManagerTest is BaseTest {
   // Sepolia Era addresses
-  IHats public HATS = IHats(address(0)); // TODO
-  ISablierV2LockupLinear public LOCKUP_LINEAR = ISablierV2LockupLinear(0x43864C567b89FA5fEE8010f92d4473Bf19169BBA);
-  IZkTokenV2 public ZK = IZkTokenV2(0x69e5DC39E2bCb1C17053d2A4ee7CAEAAc5D36f96);
-  address public ZKTokenGovernor = 0x9F9b6f090AF502c5ffe9d89df13e9DBf83df5Bf7;
   uint256 saltNonce = 1;
 
   string public VERSION = "0.1.0-zksync";
@@ -36,23 +28,15 @@ contract StreamManagerTest is Test {
 
   // stream params
   uint128 public totalAmount = 1000;
-  uint40 public cliff = 100;
+  uint40 public cliff = 0;
   uint40 public totalDuration = 1000;
 
-  function setUp() public virtual {
-    network = "sepolia-era"; // TODO add to foundry.toml
-    BLOCK_NUMBER = 3_560_079; // TODO
-    fork = vm.createFork(vm.rpcUrl(network), BLOCK_NUMBER);
+  function setUp() public virtual override {
+    super.setUp();
   }
 }
 
 contract WithInstanceTest is StreamManagerTest {
-  enum ClaimType {
-    NotClaimable,
-    Claimable,
-    ClaimableFor
-  }
-
   StreamManager public instance;
 
   function _deployStreamManagerInstance(
@@ -63,9 +47,18 @@ contract WithInstanceTest is StreamManagerTest {
     uint256 _recipientHat,
     uint256 _cancellerHat
   ) public returns (StreamManager) {
-    return new StreamManager(
-      HATS, address(ZK), LOCKUP_LINEAR, _totalAmount, _cliff, _totalDuration, _recipient, _recipientHat, _cancellerHat
-    );
+    StreamManager.CreationArgs memory args = StreamManager.CreationArgs({
+      hats: HATS,
+      zk: address(ZK),
+      lockupLinear: LOCKUP_LINEAR,
+      totalAmount: _totalAmount,
+      cliff: _cliff,
+      totalDuration: _totalDuration,
+      recipient: _recipient,
+      recipientHat: _recipientHat,
+      cancellerHat: _cancellerHat
+    });
+    return new StreamManager(args);
   }
 
   function setUp() public virtual override {
@@ -86,40 +79,22 @@ contract WithInstanceTest is StreamManagerTest {
 }
 
 contract Deployment is WithInstanceTest {
-  function test_ZK() public {
-    assertEq(address(instance.ZK()), address(ZK));
+  function test_deployParams() public {
+    assertEq(address(instance.ZK()), address(ZK), "incorrect ZK address");
+    assertEq(instance.totalAmount(), totalAmount, "incorrect total amount");
+    assertEq(instance.recipient(), recipient, "incorrect recipient");
+    assertEq(instance.cliff(), cliff, "incorrect cliff");
+    assertEq(instance.totalDuration(), totalDuration, "incorrect total duration");
+    assertEq(instance.recipientHat(), recipientHat, "incorrect recipient hat");
+    assertEq(instance.cancellerHat(), cancellerHat, "incorrect canceller hat");
   }
 
-  function test_LOCKUP_LINEAR() public {
-    assertEq(address(instance.LOCKUP_LINEAR()), address(LOCKUP_LINEAR));
-  }
-
-  function test_HATS() public {
-    assertEq(address(instance.HATS()), address(HATS));
-  }
-
-  function test_totalAmount() public {
-    assertEq(instance.totalAmount(), totalAmount);
-  }
-
-  function test_recipient() public {
-    assertEq(instance.recipient(), recipient);
-  }
-
-  function test_cliff() public {
-    assertEq(instance.cliff(), cliff);
-  }
-
-  function test_totalDuration() public {
-    assertEq(instance.totalDuration(), totalDuration);
-  }
-
-  function test_recipientHat() public {
-    assertEq(instance.recipientHat(), recipientHat);
-  }
-
-  function test_cancellerHat() public {
-    assertEq(instance.cancellerHat(), cancellerHat);
+  function test_event() public {
+    vm.expectEmit(true, true, true, true);
+    emit StreamManager.StreamManagerCreated(
+      address(ZK), totalAmount + 1, cliff, totalDuration, recipient, recipientHat, cancellerHat
+    );
+    _deployStreamManagerInstance(totalAmount + 1, cliff, totalDuration, recipient, recipientHat, cancellerHat);
   }
 }
 
@@ -210,9 +185,18 @@ contract WithHarnessTest is StreamManagerTest {
 
   function setUp() public virtual override {
     super.setUp();
-    harness = new StreamManagerHarness(
-      HATS, address(ZK), LOCKUP_LINEAR, totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat
-    );
+    StreamManager.CreationArgs memory args = StreamManager.CreationArgs({
+      hats: HATS,
+      zk: address(ZK),
+      lockupLinear: LOCKUP_LINEAR,
+      totalAmount: totalAmount,
+      cliff: cliff,
+      totalDuration: totalDuration,
+      recipient: recipient,
+      recipientHat: recipientHat,
+      cancellerHat: cancellerHat
+    });
+    harness = new StreamManagerHarness(args);
   }
 }
 
@@ -221,7 +205,7 @@ contract _MintTokens is WithHarnessTest {
 
   modifier StreamManagerHasMinterRole() {
     // set the stream manager as the minter
-    vm.prank(ZKTokenGovernor);
+    vm.prank(ZK_TOKEN_GOVERNOR);
     ZK.grantRole(MINTER_ROLE, address(harness));
     _;
   }

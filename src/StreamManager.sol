@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-// import { console2 } from "forge-std/Test.sol"; // remove before deploy
+// import { console2 } from "forge-std/Test.sol"; // comment out before deploy
 import { IERC20, IZkTokenV2 } from "./lib/IZkTokenV2.sol";
 import { ud60x18 } from "@prb/math/src/UD60x18.sol";
 import { ISablierV2LockupLinear } from "@sablier/v2-core/src/interfaces/ISablierV2LockupLinear.sol";
@@ -16,12 +16,42 @@ error NotAuthorized();
 /**
  * @title StreamManager
  * @author Haberdasher Labs
- * @notice // TODO
+ * @notice This contract manages a $ZK token grant stream. It is designed to be deployed from the GrantCreator contract
+ * as the result of a proposal to the $ZK Token Governor. The grant recipient can initiate the stream, and the grant
+ * canceller can cancel the stream.
+ *
+ * For stream initiation to work, this contract must be authorized as a $ZK token minter.
  */
 contract StreamManager {
   /*//////////////////////////////////////////////////////////////
                               EVENTS
   //////////////////////////////////////////////////////////////*/
+
+  event StreamManagerCreated(
+    address asset,
+    uint128 amount,
+    uint40 cliff,
+    uint40 totalDuration,
+    address recipient,
+    uint256 recipientHat,
+    uint256 cancellerHat
+  );
+
+  /*//////////////////////////////////////////////////////////////
+                            DATA MODELS
+  //////////////////////////////////////////////////////////////*/
+
+  struct CreationArgs {
+    IHats hats;
+    address zk;
+    ISablierV2LockupLinear lockupLinear;
+    uint128 totalAmount;
+    uint40 cliff;
+    uint40 totalDuration;
+    address recipient;
+    uint256 recipientHat;
+    uint256 cancellerHat;
+  }
 
   /*//////////////////////////////////////////////////////////////
                               CONSTANTS
@@ -51,26 +81,18 @@ contract StreamManager {
                             CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
 
-  constructor(
-    IHats _hats,
-    address _zk,
-    ISablierV2LockupLinear _lockupLinear, // zkSync Era: 0x8cB69b514E97a904743922e1adf3D1627deeeE8D
-    uint128 _totalAmount,
-    uint40 _cliff,
-    uint40 _totalDuration,
-    address _recipient,
-    uint256 _recipientHat,
-    uint256 _cancellerHat
-  ) {
-    HATS = _hats;
-    ZK = IERC20(_zk);
-    LOCKUP_LINEAR = _lockupLinear;
-    totalAmount = _totalAmount;
-    recipient = _recipient;
-    cliff = _cliff;
-    totalDuration = _totalDuration;
-    recipientHat = _recipientHat;
-    cancellerHat = _cancellerHat;
+  constructor(CreationArgs memory _args) {
+    HATS = _args.hats;
+    ZK = IERC20(_args.zk);
+    LOCKUP_LINEAR = _args.lockupLinear;
+    totalAmount = _args.totalAmount;
+    recipient = _args.recipient;
+    cliff = _args.cliff;
+    totalDuration = _args.totalDuration;
+    recipientHat = _args.recipientHat;
+    cancellerHat = _args.cancellerHat;
+
+    emit StreamManagerCreated(address(ZK), totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat);
   }
 
   /*//////////////////////////////////////////////////////////////

@@ -1,0 +1,26 @@
+{
+  "zkSyncSepolia": {
+    "AgreementEligibilityFactory": "0x0ab76D0635E50A644433B31f1bb8b0EC5FB19fa4",
+    "AllowlistEligibilityFactory": "0xa3DabD368bAE702199959e55560F688C213fBb3c",
+    "ChainingEligibilityFactory": "0x2C8AE0B842562C8B8C35E90F51d20D39C3c018F6",
+    "Hats": "0x32Ccb7600c10B4F7e678C7cbde199d98453D0e7e",
+    "HatsSignerGateFactory": "0xAa5ECbAE5D3874A5b0CFD1c24bd4E2c0Fb305c32",
+    "LockupLinear": "0x43864C567b89FA5fEE8010f92d4473Bf19169BBA",
+    "MultiClaimsHatterFactory": "0x6175C315720E9Ca084414AA6A2d0abC9C74E60c0",
+    "RecipientBranchRoot": "15",
+    "ZKToken": "0x69e5DC39E2bCb1C17053d2A4ee7CAEAAc5D36f96",
+    "ZKTokenGovernor": "0x9F9b6f090AF502c5ffe9d89df13e9DBf83df5Bf7"
+  },
+  "zkSyncEra": {
+    "AgreementEligibilityFactory": "",
+    "AllowlistEligibilityFactory": "",
+    "ChainingEligibilityFactory": "",
+    "Hats": "",
+    "HatsSignerGateFactory": "",
+    "LockupLinear": "",
+    "MultiClaimsHatterFactory": "",
+    "RecipientBranchRoot": "",
+    "ZKToken": "",
+    "ZKTokenGovernor": ""
+  }
+}
