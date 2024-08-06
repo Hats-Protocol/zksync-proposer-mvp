@@ -47,6 +47,11 @@ const config: HardhatUserConfig = {
       ethNetwork: "mainnet",
       url: "https://zksync-mainnet.g.alchemy.com/v2/SECRET",
     },
+    zkSyncSepolia: {
+      zksync: true,
+      ethNetwork: "sepolia",
+      url: "https://zksync-sepolia.g.alchemy.com/v2/SECRET",
+    },
   },
   defaultNetwork: "zkSyncLocal",
 };

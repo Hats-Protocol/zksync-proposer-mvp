@@ -4,21 +4,13 @@ pragma solidity ^0.8.18;
 
 import { console2 } from "../lib/forge-std/src/Test.sol";
 import { BaseTest } from "./Base.t.sol";
-import { GrantCreator, IHatsModuleFactory, IHatsSignerGateFactory, IMultiClaimsHatter } from "../src/GrantCreator.sol";
+import { GrantCreator, IMultiClaimsHatter } from "../src/GrantCreator.sol";
 import { GrantCreatorHarness } from "./harnesses/GrantCreatorHarness.sol";
 
 contract GrantCreatorTest is BaseTest {
   uint256 saltNonce = 1;
 
   string public VERSION = "0.1.0-zksync";
-
-  // params
-  uint256 public recipientBranchRoot;
-  IHatsModuleFactory public CHAINING_ELIGIBILITY_FACTORY;
-  IHatsModuleFactory public AGREEMENT_ELIGIBILITY_FACTORY;
-  IHatsModuleFactory public ALLOWLIST_ELIGIBILITY_FACTORY;
-  IHatsModuleFactory public MULTI_CLAIMS_HATTER_FACTORY;
-  IHatsSignerGateFactory public HSG_FACTORY;
 
   // hats
   uint256 public tophat;
@@ -37,24 +29,6 @@ contract GrantCreatorTest is BaseTest {
 
   function setUp() public virtual override {
     super.setUp();
-
-    // set params from config
-    CHAINING_ELIGIBILITY_FACTORY = IHatsModuleFactory(0x2C8AE0B842562C8B8C35E90F51d20D39C3c018F6);
-    AGREEMENT_ELIGIBILITY_FACTORY = IHatsModuleFactory(0x0ab76D0635E50A644433B31f1bb8b0EC5FB19fa4);
-    ALLOWLIST_ELIGIBILITY_FACTORY = IHatsModuleFactory(0xa3DabD368bAE702199959e55560F688C213fBb3c);
-    HSG_FACTORY = IHatsSignerGateFactory(0xAa5ECbAE5D3874A5b0CFD1c24bd4E2c0Fb305c32);
-    MULTI_CLAIMS_HATTER_FACTORY = IHatsModuleFactory(0x6175C315720E9Ca084414AA6A2d0abC9C74E60c0);
-    // CHAINING_ELIGIBILITY_FACTORY = IHatsModuleFactory(config.chainingEligibilityFactory);
-    // AGREEMENT_ELIGIBILITY_FACTORY = IHatsModuleFactory(config.agreementEligibilityFactory);
-    // ALLOWLIST_ELIGIBILITY_FACTORY = IHatsModuleFactory(config.allowlistEligibilityFactory);
-    // HSG_FACTORY = IHatsSignerGateFactory(config.hsgFactory);
-    // MULTI_CLAIMS_HATTER_FACTORY = IHatsModuleFactory(config.multiClaimsHatterFactory);
-
-    // console2.log("CHAINING_ELIGIBILITY_FACTORY", address(CHAINING_ELIGIBILITY_FACTORY));
-    // console2.log("AGREEMENT_ELIGIBILITY_FACTORY", address(AGREEMENT_ELIGIBILITY_FACTORY));
-    // console2.log("ALLOWLIST_ELIGIBILITY_FACTORY", address(ALLOWLIST_ELIGIBILITY_FACTORY));
-    // console2.log("HSG_FACTORY", address(HSG_FACTORY));
-    // console2.log("MULTI_CLAIMS_HATTER_FACTORY", address(MULTI_CLAIMS_HATTER_FACTORY));
   }
 }
 
@@ -62,7 +36,7 @@ contract WithInstanceTest is GrantCreatorTest {
   GrantCreator public grantCreator;
 
   function _deployGrantCreatorInstance(IMultiClaimsHatter _claimsHatter) public returns (GrantCreator) {
-    return new GrantCreator(
+    return new GrantCreator{ salt: bytes32(abi.encodePacked(saltNonce)) }(
       HATS,
       _claimsHatter,
       CHAINING_ELIGIBILITY_FACTORY,
@@ -84,24 +58,27 @@ contract WithInstanceTest is GrantCreatorTest {
     console2.log("ALLOWLIST_ELIGIBILITY_FACTORY code length", address(ALLOWLIST_ELIGIBILITY_FACTORY).code.length);
     console2.log("HSG_FACTORY code length", address(HSG_FACTORY).code.length);
     console2.log("MULTI_CLAIMS_HATTER_FACTORY code length", address(MULTI_CLAIMS_HATTER_FACTORY).code.length);
+    console2.log("LOCKUP_LINEAR code length", address(LOCKUP_LINEAR).code.length);
+    console2.log("ZK code length", address(ZK).code.length);
+    console2.log("ZK_TOKEN_GOVERNOR code length", address(ZK_TOKEN_GOVERNOR).code.length);
 
     // set up hats
-    // HATS.mintTopHat(dao, "tophat", "dao.eth/tophat");
-    // vm.startPrank(dao);
-    // autoAdmin = HATS.createHat(tophat, "autoAdmin", 1, eligibility, toggle, true, "dao.eth/autoAdmin");
-    // accountabilityHat =
-    //   HATS.createHat(autoAdmin, "accountabilityHat", 1, eligibility, toggle, true, "dao.eth/accountabilityHat");
-    // recipientBranchRoot =
-    //   HATS.createHat(autoAdmin, "recipientBranchRoot", 1, eligibility, toggle, true, "dao.eth/recipientBranchRoot");
-    // HATS.mintHat(accountabilityHat, accountabilityCouncil);
-    // vm.stopPrank();
+    tophat = HATS.mintTopHat(dao, "tophat", "dao.eth/tophat");
+    vm.startPrank(dao);
+    autoAdmin = HATS.createHat(tophat, "autoAdmin", 1, eligibility, toggle, true, "dao.eth/autoAdmin");
+    accountabilityHat =
+      HATS.createHat(autoAdmin, "accountabilityHat", 1, eligibility, toggle, true, "dao.eth/accountabilityHat");
+    recipientBranchRoot =
+      HATS.createHat(autoAdmin, "recipientBranchRoot", 1, eligibility, toggle, true, "dao.eth/recipientBranchRoot");
+    HATS.mintHat(accountabilityHat, accountabilityCouncil);
+    vm.stopPrank();
 
-    // deploy the claims hatter and mint it to the autoAdmin hat
+    // // deploy the claims hatter and mint it to the autoAdmin hat
     claimsHatter = IMultiClaimsHatter(MULTI_CLAIMS_HATTER_FACTORY.deployModule(autoAdmin, address(HATS), "", saltNonce));
     vm.prank(dao);
     HATS.mintHat(autoAdmin, address(claimsHatter));
 
-    // // deploy the instance
+    // // // deploy the instance
     grantCreator = _deployGrantCreatorInstance(claimsHatter);
   }
 }

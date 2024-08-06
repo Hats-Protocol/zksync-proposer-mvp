@@ -41,6 +41,8 @@ contract GrantCreator {
                               CONSTANTS
   //////////////////////////////////////////////////////////////*/
 
+  string public constant VERSION = "mvp";
+
   uint256 public constant SALT_NONCE = 1;
 
   // contracts

@@ -6,7 +6,7 @@ import * as hre from "hardhat";
 // Before executing a real deployment, be sure to set these values as appropriate for the environment being deployed
 // to. The values used in the script at the time of deployment can be checked in along with the deployment artifacts
 // produced by running the scripts.
-const contractName = "StreamManagerFactory";
+const contractName = "GrantCreator";
 async function main() {
   dotEnvConfig();
 
@@ -20,9 +20,14 @@ async function main() {
   const zkWallet = new Wallet(deployerPrivateKey);
   const deployer = new Deployer(hre, zkWallet);
 
+  // get the deployment config for the current network
+  const configData = require("./NetworkConfig.json");
+  const config = configData[hre.network.name];
+
   const contract = await deployer.loadArtifact(contractName);
-  const constructorArgs: any = [];
-  const multiClaimsHatterFactory = await deployer.deploy(
+  const constructorArgs: any = [config.Hats, config.ChainingEligibilityFactory, config.AgreementEligibilityFactory, config.AllowlistEligibilityFactory, config.HatsSignerGateFactory, config.LockupLinear, config.ZKToken, config.RecipientBranchRoot];
+
+  const grantCreator = await deployer.deploy(
     contract,
     constructorArgs,
     "create2",
@@ -34,10 +39,10 @@ async function main() {
   );
   console.log(
     "constructor args:" +
-    multiClaimsHatterFactory.interface.encodeDeploy(constructorArgs)
+    grantCreator.interface.encodeDeploy(constructorArgs)
   );
   console.log(
-    `${contractName} was deployed to ${await multiClaimsHatterFactory.getAddress()}`
+    `${contractName} was deployed to ${await grantCreator.getAddress()}`
   );
 }
 

@@ -7,29 +7,16 @@
   auto_detect_solc = false
   bytecode_hash = "none"
   gas_reports = []
+  solc = "0.8.22"
   remappings = [
     "ds-test/=lib/forge-std/lib/ds-test/src/",
     "forge-std/=lib/forge-std/src/",
     "hats-module/=lib/hats-module/src/",
     "multi-claims-hatter/=lib/multi-claims-hatter/src/",
   ]
-  solc = "0.8.22"
-  # Enable tests to read ir-optimized bytecode precompiled by profile.optimized
-  fs_permissions = [{ access = "read", path = "./optimized-out" }]
+  # Enable tests to read network config deploy parameters
+  fs_permissions = [{ access = "read", path = "./script/NetworkConfig.json" }]
 
-# for pre-compiling ir-optimized bytecode that will be later deployed by tests
-[profile.optimized]
-  bytecode_hash = "none"
-  out = "optimized-out"
-  script = "src"
-  sizes = true
-  via_ir = true
-  # no need to compile tests with via-ir since they load optimized bytecode directly by default
-  test = "src"
-
-# for running tests against pre-compiled ir-optimized deployments
-[profile.test]
-  src = "test"
 
 [profile.ci]
   fuzz = { runs = 5000 }
@@ -61,6 +48,9 @@
   optimism = "https://optimism-mainnet.infura.io/v3/${INFURA_KEY}"
   polygon = "${POLYGON_RPC}"
   sepolia = "https://sepolia.infura.io/v3/${INFURA_KEY}"
+  zkSyncEra = "https://mainnet.era.zksync.io"
+  # zkSyncSepolia = "https://sepolia.era.zksync.dev"
+  zkSyncSepolia = "https://zksync-sepolia.g.alchemy.com/v2/ci9sb0qmsULlUNikKQZNrAQ8sYhGQj1N"
 
 [etherscan]
   arbitrum = { key = "${ARBISCAN_KEY}", url = "https://api.arbiscan.io/api" }
