@@ -48,8 +48,8 @@
   optimism = "https://optimism-mainnet.infura.io/v3/${INFURA_KEY}"
   polygon = "${POLYGON_RPC}"
   sepolia = "https://sepolia.infura.io/v3/${INFURA_KEY}"
-  zkSyncEra = "https://mainnet.era.zksync.io"
-  zkSyncSepolia = "https://sepolia.era.zksync.dev"
+  zkSyncEra = "https://zksync-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
+  zkSyncSepolia = "https://zksync-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}"
 
 [etherscan]
   arbitrum = { key = "${ARBISCAN_KEY}", url = "https://api.arbiscan.io/api" }
