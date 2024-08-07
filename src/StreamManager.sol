@@ -6,7 +6,7 @@ import { IERC20, IZkTokenV2 } from "./lib/IZkTokenV2.sol";
 import { ud60x18 } from "@prb/math/src/UD60x18.sol";
 import { ISablierV2LockupLinear } from "@sablier/v2-core/src/interfaces/ISablierV2LockupLinear.sol";
 import { Broker, LockupLinear } from "@sablier/v2-core/src/types/DataTypes.sol";
-import { IHats } from "../lib/hats-protocol/src/interfaces/IHats.sol";
+import { IHats } from "../lib/hats-protocol/src/Interfaces/IHats.sol";
 
 /*//////////////////////////////////////////////////////////////
                             CUSTOM ERRORS
@@ -48,7 +48,6 @@ contract StreamManager {
     uint128 totalAmount;
     uint40 cliff;
     uint40 totalDuration;
-    address recipient;
     uint256 recipientHat;
     uint256 cancellerHat;
   }
@@ -62,9 +61,10 @@ contract StreamManager {
   IERC20 public immutable ZK;
   ISablierV2LockupLinear public immutable LOCKUP_LINEAR;
   IHats public immutable HATS;
+  address public immutable DEPLOYER;
 
   uint128 public immutable totalAmount;
-  address public immutable recipient; // recipientSafe
+
   uint40 public immutable cliff;
   uint40 public immutable totalDuration;
 
@@ -75,6 +75,7 @@ contract StreamManager {
                             MUTABLE STATE
   //////////////////////////////////////////////////////////////*/
 
+  address public recipient; // recipientSafe
   uint256 public streamId;
 
   /*//////////////////////////////////////////////////////////////
@@ -86,13 +87,12 @@ contract StreamManager {
     ZK = IERC20(_args.zk);
     LOCKUP_LINEAR = _args.lockupLinear;
     totalAmount = _args.totalAmount;
-    recipient = _args.recipient;
     cliff = _args.cliff;
     totalDuration = _args.totalDuration;
     recipientHat = _args.recipientHat;
     cancellerHat = _args.cancellerHat;
 
-    emit StreamManagerCreated(address(ZK), totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat);
+    DEPLOYER = msg.sender;
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -100,13 +100,28 @@ contract StreamManager {
   //////////////////////////////////////////////////////////////*/
 
   modifier onlyRecipient() {
-    if (!HATS.isWearerOfHat(recipient, recipientHat)) revert NotAuthorized();
+    if (!HATS.isWearerOfHat(msg.sender, recipientHat)) revert NotAuthorized();
     _;
   }
 
   modifier onlyCanceller() {
     if (!HATS.isWearerOfHat(msg.sender, cancellerHat)) revert NotAuthorized();
     _;
+  }
+
+  modifier onlyDeployer() {
+    if (msg.sender != DEPLOYER) revert NotAuthorized();
+    _;
+  }
+
+  /*//////////////////////////////////////////////////////////////
+                          SETUP FUNCTION
+  //////////////////////////////////////////////////////////////*/
+
+  function setUp(address _recipient) public onlyDeployer {
+    recipient = _recipient;
+
+    emit StreamManagerCreated(address(ZK), totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat);
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -125,7 +140,7 @@ contract StreamManager {
     LockupLinear.CreateWithDurations memory params;
 
     // Declare the function parameters
-    params.sender = msg.sender; // The sender will be able to cancel the stream
+    params.sender = address(this); // The sender will be able to cancel the stream
     params.recipient = recipient; // The recipient of the streamed assets
     params.totalAmount = totalAmount; // Total amount is the amount inclusive of all fees
     params.asset = ZK; // The streaming asset
@@ -148,7 +163,7 @@ contract StreamManager {
     // cancel the stream
     LOCKUP_LINEAR.cancel(streamId);
 
-    // unstreamed tokens are sent to this contract
+    // unstreamed tokens are returned to this contract
     uint256 unstreamedTokens = ZK.balanceOf(address(this));
 
     // transfer the unstreamed tokens to the refund destination

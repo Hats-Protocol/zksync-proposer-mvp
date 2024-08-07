@@ -29,7 +29,9 @@ contract StreamManagerTest is BaseTest {
   // stream params
   uint128 public totalAmount = 1000;
   uint40 public cliff = 0;
-  uint40 public totalDuration = 1000;
+  uint40 public totalDuration = 2000;
+
+  bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
   function setUp() public virtual override {
     super.setUp();
@@ -43,7 +45,6 @@ contract WithInstanceTest is StreamManagerTest {
     uint128 _totalAmount,
     uint40 _cliff,
     uint40 _totalDuration,
-    address _recipient,
     uint256 _recipientHat,
     uint256 _cancellerHat
   ) public returns (StreamManager) {
@@ -54,11 +55,17 @@ contract WithInstanceTest is StreamManagerTest {
       totalAmount: _totalAmount,
       cliff: _cliff,
       totalDuration: _totalDuration,
-      recipient: _recipient,
       recipientHat: _recipientHat,
       cancellerHat: _cancellerHat
     });
     return new StreamManager(args);
+  }
+
+  function _grantMinterRole(address _streamManager) internal {
+    // set the stream manager as the minter
+    vm.prank(0x6fEB7Ca79CFD7e1CF761c7Aa8659F24e392fbc7D); // current minter admin
+    // vm.prank(ZK_TOKEN_MINTER_ADMIN);
+    ZK.grantRole(MINTER_ROLE, _streamManager);
   }
 
   function setUp() public virtual override {
@@ -74,7 +81,10 @@ contract WithInstanceTest is StreamManagerTest {
     vm.stopPrank();
 
     // deploy the instance
-    instance = _deployStreamManagerInstance(totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat);
+    instance = _deployStreamManagerInstance(totalAmount, cliff, totalDuration, recipientHat, cancellerHat);
+
+    // grant the token minter role to the instance
+    _grantMinterRole(address(instance));
   }
 }
 
@@ -82,7 +92,6 @@ contract Deployment is WithInstanceTest {
   function test_deployParams() public {
     assertEq(address(instance.ZK()), address(ZK), "incorrect ZK address");
     assertEq(instance.totalAmount(), totalAmount, "incorrect total amount");
-    assertEq(instance.recipient(), recipient, "incorrect recipient");
     assertEq(instance.cliff(), cliff, "incorrect cliff");
     assertEq(instance.totalDuration(), totalDuration, "incorrect total duration");
     assertEq(instance.recipientHat(), recipientHat, "incorrect recipient hat");
@@ -94,7 +103,7 @@ contract Deployment is WithInstanceTest {
     emit StreamManager.StreamManagerCreated(
       address(ZK), totalAmount + 1, cliff, totalDuration, recipient, recipientHat, cancellerHat
     );
-    _deployStreamManagerInstance(totalAmount + 1, cliff, totalDuration, recipient, recipientHat, cancellerHat);
+    _deployStreamManagerInstance(totalAmount + 1, cliff, totalDuration, recipientHat, cancellerHat);
   }
 }
 
@@ -106,15 +115,19 @@ contract CreateStream is WithInstanceTest {
     assertEq(LOCKUP_LINEAR.getDepositedAmount(stream), totalAmount, "incorrect deposited amount");
     assertEq(address(LOCKUP_LINEAR.getAsset(stream)), address(ZK), "incorrect asset");
     assertTrue(LOCKUP_LINEAR.isCancelable(stream), "stream is not cancelable");
-    assertTrue(LOCKUP_LINEAR.isTransferable(stream), "stream is not transferable");
+    assertFalse(LOCKUP_LINEAR.isTransferable(stream), "stream is transferable");
 
     uint256 startTime = LOCKUP_LINEAR.getStartTime(stream);
     assertEq(startTime, block.timestamp, "incorrect start time");
     assertEq(LOCKUP_LINEAR.getEndTime(stream), startTime + totalDuration, "incorrect end time");
-    assertEq(LOCKUP_LINEAR.getCliffTime(stream), startTime + cliff, "incorrect cliff time");
+    assertEq(LOCKUP_LINEAR.getCliffTime(stream), 0, "incorrect cliff time");
   }
 
   function test_recipient() public {
+    // cache the inital token supply and sablier balance
+    uint256 initialSupply = ZK.totalSupply();
+    uint256 initialSablierBalance = ZK.balanceOf(address(LOCKUP_LINEAR));
+
     // create the stream
     vm.prank(recipient);
     uint256 stream = instance.createStream();
@@ -125,8 +138,9 @@ contract CreateStream is WithInstanceTest {
     // assert that the stream exists and has the correct parameters
     _streamAssertions(stream);
 
-    // assert that tokens were minted to the instance
-    assertEq(ZK.balanceOf(address(instance)), totalAmount);
+    // assert that tokens were minted and transferred to the lockup linear contract
+    assertEq(ZK.totalSupply(), initialSupply + totalAmount);
+    assertEq(ZK.balanceOf(address(LOCKUP_LINEAR)), initialSablierBalance + totalAmount);
   }
 
   function test_revert_nonRecipient() public {
@@ -148,10 +162,16 @@ contract CancelStream is WithInstanceTest {
   function test_canceller() public {
     address refundee = dao;
 
+    // cache the initial token balances
+    // uint256 initialRefundeeBalance = ZK.balanceOf(refundee);
+    uint256 initialSablierBalance = ZK.balanceOf(address(LOCKUP_LINEAR));
+
     // create a stream
     vm.prank(recipient);
     uint256 stream = instance.createStream();
-    uint256 instanceBalance = ZK.balanceOf(address(instance));
+
+    // cache the tokens transferred to the lockup linear contract
+    uint256 sablierBalance = ZK.balanceOf(address(LOCKUP_LINEAR));
 
     // cancel the stream
     vm.prank(canceller);
@@ -162,7 +182,7 @@ contract CancelStream is WithInstanceTest {
 
     // assert that the unstreamed tokens are sent to the refundee
     // since no time has passed, all the tokens are unstreamed
-    assertEq(ZK.balanceOf(refundee), instanceBalance);
+    assertEq(ZK.balanceOf(refundee), sablierBalance - initialSablierBalance);
   }
 
   function test_revert_nonCanceller() public {
@@ -180,11 +200,12 @@ contract CancelStream is WithInstanceTest {
   }
 }
 
-contract WithHarnessTest is StreamManagerTest {
+contract WithHarnessTest is WithInstanceTest {
   StreamManagerHarness public harness;
 
   function setUp() public virtual override {
     super.setUp();
+
     StreamManager.CreationArgs memory args = StreamManager.CreationArgs({
       hats: HATS,
       zk: address(ZK),
@@ -192,7 +213,6 @@ contract WithHarnessTest is StreamManagerTest {
       totalAmount: totalAmount,
       cliff: cliff,
       totalDuration: totalDuration,
-      recipient: recipient,
       recipientHat: recipientHat,
       cancellerHat: cancellerHat
     });
@@ -201,16 +221,10 @@ contract WithHarnessTest is StreamManagerTest {
 }
 
 contract _MintTokens is WithHarnessTest {
-  bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+  function test_minter() public {
+    // grant the token minter role to the harness
+    _grantMinterRole(address(harness));
 
-  modifier StreamManagerHasMinterRole() {
-    // set the stream manager as the minter
-    vm.prank(ZK_TOKEN_GOVERNOR);
-    ZK.grantRole(MINTER_ROLE, address(harness));
-    _;
-  }
-
-  function test_minter() public StreamManagerHasMinterRole {
     // mint some tokens
     vm.prank(address(harness));
     ZK.mint(recipient, 1000);
@@ -252,6 +266,8 @@ contract _AuthMods is WithHarnessTest {
 
   function test_cancellerOnly_wearer() public {
     uint256 preCount = harness.counter();
+
+    assertTrue(HATS.isWearerOfHat(canceller, cancellerHat), "not wearing cancellerHat");
 
     vm.prank(canceller);
     harness.cancellerOnly();

@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 import { console2 } from "../lib/forge-std/src/Test.sol";
 import { BaseTest } from "./Base.t.sol";
-import { GrantCreator, IMultiClaimsHatter } from "../src/GrantCreator.sol";
+import { GrantCreator, ClaimType, IMultiClaimsHatter, StreamManager } from "../src/GrantCreator.sol";
 import { GrantCreatorHarness } from "./harnesses/GrantCreatorHarness.sol";
 
 contract GrantCreatorTest is BaseTest {
@@ -16,7 +16,16 @@ contract GrantCreatorTest is BaseTest {
   uint256 public tophat;
   uint256 public autoAdmin;
 
+  uint256 public recipientHat;
   uint256 public accountabilityHat;
+  uint256 public kycManagerHat;
+  uint256 public agreementOwnerHat;
+
+  string public agreement;
+  string public grantName;
+
+  uint128 public grantAmount;
+  uint40 public streamDuration;
 
   // test accounts
   address public eligibility = makeAddr("eligibility");
@@ -52,15 +61,15 @@ contract WithInstanceTest is GrantCreatorTest {
   function setUp() public virtual override {
     super.setUp();
 
-    console2.log("HATS code length", address(HATS).code.length);
-    console2.log("CHAINING_ELIGIBILITY_FACTORY code length", address(CHAINING_ELIGIBILITY_FACTORY).code.length);
-    console2.log("AGREEMENT_ELIGIBILITY_FACTORY code length", address(AGREEMENT_ELIGIBILITY_FACTORY).code.length);
-    console2.log("ALLOWLIST_ELIGIBILITY_FACTORY code length", address(ALLOWLIST_ELIGIBILITY_FACTORY).code.length);
-    console2.log("HSG_FACTORY code length", address(HSG_FACTORY).code.length);
-    console2.log("MULTI_CLAIMS_HATTER_FACTORY code length", address(MULTI_CLAIMS_HATTER_FACTORY).code.length);
-    console2.log("LOCKUP_LINEAR code length", address(LOCKUP_LINEAR).code.length);
-    console2.log("ZK code length", address(ZK).code.length);
-    console2.log("ZK_TOKEN_GOVERNOR code length", address(ZK_TOKEN_GOVERNOR).code.length);
+    // console2.log("HATS code length", address(HATS).code.length);
+    // console2.log("CHAINING_ELIGIBILITY_FACTORY code length", address(CHAINING_ELIGIBILITY_FACTORY).code.length);
+    // console2.log("AGREEMENT_ELIGIBILITY_FACTORY code length", address(AGREEMENT_ELIGIBILITY_FACTORY).code.length);
+    // console2.log("ALLOWLIST_ELIGIBILITY_FACTORY code length", address(ALLOWLIST_ELIGIBILITY_FACTORY).code.length);
+    // console2.log("HSG_FACTORY code length", address(HSG_FACTORY).code.length);
+    // console2.log("MULTI_CLAIMS_HATTER_FACTORY code length", address(MULTI_CLAIMS_HATTER_FACTORY).code.length);
+    // console2.log("LOCKUP_LINEAR code length", address(LOCKUP_LINEAR).code.length);
+    // console2.log("ZK code length", address(ZK).code.length);
+    // console2.log("ZK_TOKEN_GOVERNOR_TIMELOCK code length", address(ZK_TOKEN_GOVERNOR_TIMELOCK).code.length);
 
     // set up hats
     tophat = HATS.mintTopHat(dao, "tophat", "dao.eth/tophat");
@@ -109,7 +118,7 @@ contract Deployment is WithInstanceTest {
   }
 }
 
-contract WithHarnessTest is GrantCreatorTest {
+contract WithHarnessTest is WithInstanceTest {
   GrantCreatorHarness public harness;
 
   function setUp() public virtual override {
@@ -128,16 +137,129 @@ contract WithHarnessTest is GrantCreatorTest {
   }
 }
 
-contract _DeployAgreementEligibilty is WithHarnessTest { }
+// FIXME deploy is failing
+contract _DeployAgreementEligibilty is WithHarnessTest {
+  function test_deployAgreementEligibilty() public {
+    recipientHat = 1;
+    agreementOwnerHat = 2;
+    accountabilityHat = 3;
+    agreement = "test agreement";
 
-contract _DeployAllowlistEligibilty is WithHarnessTest { }
+    address agreementEligibilityModule =
+      harness.deployAgreementEligibilityModule(recipientHat, agreementOwnerHat, accountabilityHat, agreement);
 
-contract _DeployChainingEligibilty is WithHarnessTest { }
+    bytes memory initData = abi.encode(agreementOwnerHat, accountabilityHat, agreement);
 
-contract _DeployHSGAndSafe is WithHarnessTest { }
+    assertEq(
+      agreementEligibilityModule,
+      AGREEMENT_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE())
+    );
+  }
+}
 
+// FIXME predicted address doen't match actual
+contract _DeployAllowlistEligibilty is WithHarnessTest {
+  function test_deployAllowlistEligibilty() public {
+    recipientHat = 1;
+    kycManagerHat = 2;
+    accountabilityHat = 3;
+
+    address allowlistEligibilityModule =
+      harness.deployAllowlistEligibilityModule(recipientHat, kycManagerHat, accountabilityHat);
+
+    bytes memory initData = abi.encode(kycManagerHat, accountabilityHat);
+
+    assertEq(
+      allowlistEligibilityModule,
+      ALLOWLIST_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE())
+    );
+  }
+}
+
+// FIXME deploy is failing
+contract _DeployChainingEligibilty is WithHarnessTest {
+  function test_deployChainingEligibilty() public {
+    agreementOwnerHat = 0;
+    recipientHat = 1;
+    accountabilityHat = 2;
+    kycManagerHat = 3;
+    agreement = "test agreement";
+
+    address chainingEligibilty = harness.deployChainingEligibilityModule(
+      recipientHat, agreementOwnerHat, kycManagerHat, accountabilityHat, agreement
+    );
+
+    address agreementEligibilityModule =
+      harness.deployAgreementEligibilityModule(recipientHat, agreementOwnerHat, accountabilityHat, agreement);
+    address kycEligibilityModule =
+      harness.deployAllowlistEligibilityModule(recipientHat, kycManagerHat, accountabilityHat);
+
+    bytes memory initData = abi.encode(
+      1, // NUM_CONJUNCTION_CLAUSES
+      2, // CONJUNCTION_CLAUSE_LENGTH
+      agreementEligibilityModule,
+      kycEligibilityModule
+    );
+
+    assertEq(
+      chainingEligibilty,
+      CHAINING_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE())
+    );
+  }
+}
+
+// TODO
+contract _DeployHSGAndSafe is WithHarnessTest {
+  function test_deployHSGAndSafe() public {
+    recipientHat = 1;
+    accountabilityHat = 2;
+    address safe = harness.deployHSGAndSafe(recipientHat, accountabilityHat);
+
+    // todo assert that the safe and hsg are deployed
+  }
+}
+
+// TODO
 contract _DeployStreamManager is WithHarnessTest { }
 
-contract PredictStreamManagerAddress is WithInstanceTest { }
+contract PredictStreamManagerAddress is WithHarnessTest {
+  function test_predictStreamManagerAddress() public {
+    recipientHat = 1;
+    accountabilityHat = 2;
+    grantAmount = 4000;
+    streamDuration = 5000;
+    address streamManager =
+      harness.deployStreamManager(recipientHat, accountabilityHat, recipient, grantAmount, streamDuration);
 
-contract CreateGrant is WithInstanceTest { }
+    assertEq(
+      streamManager,
+      harness.predictStreamManagerAddress(accountabilityHat, grantAmount, streamDuration),
+      "incorrect stream manager address"
+    );
+  }
+}
+
+// TODO
+contract CreateGrant is WithInstanceTest {
+  function test_happy() public {
+    grantName = "test grant";
+    agreement = "test agreement";
+    kycManagerHat = 1;
+    accountabilityHat = 2;
+    grantAmount = 4000;
+    streamDuration = 5000;
+    address predictedStreamManagerAddress =
+      grantCreator.predictStreamManagerAddress(accountabilityHat, grantAmount, streamDuration);
+
+    (uint256 recipientHatId, address recipientSafe, address streamManager) = grantCreator.createGrant(
+      grantName, agreement, accountabilityHat, kycManagerHat, grantAmount, streamDuration, predictedStreamManagerAddress
+    );
+
+    // assert that the recipient hat is the correct id
+    assertEq(recipientHatId, HATS.getNextId(recipientHat));
+
+    // assert that the recipientHat is set as claimableFor
+    ClaimType claimType = claimsHatter.hatToClaimType(recipientHatId);
+    assertEq(uint8(claimType), uint8(ClaimType.ClaimableFor));
+  }
+}

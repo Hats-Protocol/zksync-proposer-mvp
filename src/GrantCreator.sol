@@ -2,10 +2,10 @@
 pragma solidity ^0.8.19;
 
 // import { console2 } from "forge-std/Test.sol"; // comment out before deploy
-import { IHatsModuleFactory } from "../lib/hats-module/src/interfaces/IHatsModuleFactory.sol";
+import { IHatsModuleFactory } from "./lib/IHatsModuleFactory.sol";
 import { IMultiClaimsHatter, ClaimType } from "./lib/IMultiClaimsHatter.sol";
 import { IHatsSignerGateFactory } from "./lib/IHatsSignerGateFactory.sol";
-import { StreamManager, IHats, ISablierV2LockupLinear, IZkTokenV2 } from "./StreamManager.sol";
+import { StreamManager, IHats, ISablierV2LockupLinear } from "./StreamManager.sol";
 import { L2ContractHelper } from "./lib/L2ContractHelper.sol";
 
 /**
@@ -57,7 +57,9 @@ contract GrantCreator {
 
   uint256 public immutable RECIPIENT_BRANCH_ROOT;
 
-  bytes32 public constant STREAM_MANAGER_BYTECODE_HASH = 0x0; // TODO
+  /// @dev Bytecode hash can be found in zkout/StreamManager.sol/StreamManager.json under the hash key.
+  bytes32 public constant STREAM_MANAGER_BYTECODE_HASH =
+    0x010001e70435d6470adba8b9078022b7278deebc8929ef0c7365919dfa98865f;
 
   /*//////////////////////////////////////////////////////////////
                             CONSTRUCTOR
@@ -124,7 +126,7 @@ contract GrantCreator {
 
     // deploy chained eligibility with agreement and kyc modules
     address chainingEligibilityModule = _deployChainingEligibilityModule({
-      _hatId: recipientHat,
+      _targetHat: recipientHat,
       _agreementOwnerHat: 0, // no owner for the agreement eligibility module
       _allowlistOwnerHat: kycManagerHat,
       _arbitratorHat: accountabilityJudgeHat,
@@ -162,30 +164,25 @@ contract GrantCreator {
 
   /**
    * @notice Predicts the address of the stream manager contract deployed with the given parameters.
-   * @param _recipientHat The hat id of the recipient hat.
    * @param _accountabilityJudgeHat The hat id of the accountability judge.
-   * @param _recipientSafe The address of the recipient Safe.
    * @param _amount The amount of $ZK to grant as a stream.
    * @param _streamDuration The duration of the stream.
    * @return The predicted address of the stream manager.
    */
-  function predictStreamManagerAddress(
-    uint256 _recipientHat,
-    uint256 _accountabilityJudgeHat,
-    address _recipientSafe,
-    uint128 _amount,
-    uint40 _streamDuration
-  ) public view returns (address) {
+  function predictStreamManagerAddress(uint256 _accountabilityJudgeHat, uint128 _amount, uint40 _streamDuration)
+    public
+    view
+    returns (address)
+  {
+    // predict the recipient hat id
+    uint256 recipientHat = HATS.getNextId(RECIPIENT_BRANCH_ROOT);
+
     return L2ContractHelper.computeCreate2Address(
       address(this),
       bytes32(SALT_NONCE),
       STREAM_MANAGER_BYTECODE_HASH,
       keccak256(
-        abi.encode(
-          _buildStreamManagerCreationArgs(
-            _recipientHat, _accountabilityJudgeHat, _recipientSafe, _amount, _streamDuration
-          )
-        )
+        abi.encode(_buildStreamManagerCreationArgs(recipientHat, _accountabilityJudgeHat, _amount, _streamDuration))
       )
     );
   }
@@ -196,41 +193,41 @@ contract GrantCreator {
 
   /**
    * @dev Deploys a Hats agreement eligibility module.
-   * @param _hatId The  id of the recipient hat.
+   * @param _targetHat The id of the target hat.
    * @param _ownerHat The id of the owner hat.
    * @param _arbitratorHat The id of the arbitrator hat.
    * @param _agreement The agreement for the grant.
    * @return The address of the deployed module.
    */
   function _deployAgreementEligibilityModule(
-    uint256 _hatId,
+    uint256 _targetHat,
     uint256 _ownerHat,
     uint256 _arbitratorHat,
     string memory _agreement
   ) internal returns (address) {
     bytes memory initData = abi.encode(_ownerHat, _arbitratorHat, _agreement);
-    return AGREEMENT_ELIGIBILITY_FACTORY.deployModule(_hatId, address(HATS), initData, SALT_NONCE);
+    return AGREEMENT_ELIGIBILITY_FACTORY.deployModule(_targetHat, address(HATS), initData, SALT_NONCE);
   }
 
   /**
    * @dev Deploys a Hats allowlist eligibility module.
-   * @param _hatId The id of the recipient hat.
+   * @param _targetHat The id of the target hat.
    * @param _ownerHat The id of the owner hat.
    * @param _arbitratorHat The id of the arbitrator hat.
    * @return The address of the deployed module.
    */
-  function _deployAllowlistEligibilityModule(uint256 _hatId, uint256 _ownerHat, uint256 _arbitratorHat)
+  function _deployAllowlistEligibilityModule(uint256 _targetHat, uint256 _ownerHat, uint256 _arbitratorHat)
     internal
     returns (address)
   {
     bytes memory initData = abi.encode(_ownerHat, _arbitratorHat);
-    return ALLOWLIST_ELIGIBILITY_FACTORY.deployModule(_hatId, address(HATS), initData, SALT_NONCE);
+    return ALLOWLIST_ELIGIBILITY_FACTORY.deployModule(_targetHat, address(HATS), initData, SALT_NONCE);
   }
 
   /**
    * @dev Chains Hats agreement and allowlist modules. To be eligible for a hat wiht this chained eligibility, a user
    * must have signed the agreement AND on the allowlist.
-   * @param _hatId The id of the recipient hat.
+   * @param _targetHat The id of the target hat.
    * @param _agreementOwnerHat The id of the agreement owner hat.
    * @param _allowlistOwnerHat The id of the allowlist owner hat.
    * @param _arbitratorHat The id of the arbitrator hat.
@@ -238,16 +235,16 @@ contract GrantCreator {
    * @return The address of the deployed module.
    */
   function _deployChainingEligibilityModule(
-    uint256 _hatId,
+    uint256 _targetHat,
     uint256 _agreementOwnerHat,
     uint256 _allowlistOwnerHat,
     uint256 _arbitratorHat,
     string memory _agreement
   ) internal returns (address) {
     address agreementEligibilityModule =
-      _deployAgreementEligibilityModule(_hatId, _agreementOwnerHat, _arbitratorHat, _agreement);
+      _deployAgreementEligibilityModule(_targetHat, _agreementOwnerHat, _arbitratorHat, _agreement);
 
-    address kycEligibilityModule = _deployAllowlistEligibilityModule(_hatId, _allowlistOwnerHat, _arbitratorHat);
+    address kycEligibilityModule = _deployAllowlistEligibilityModule(_targetHat, _allowlistOwnerHat, _arbitratorHat);
 
     bytes memory initData = abi.encode(
       1, // NUM_CONJUNCTION_CLAUSES
@@ -255,7 +252,7 @@ contract GrantCreator {
       agreementEligibilityModule,
       kycEligibilityModule
     );
-    return CHAINING_ELIGIBILITY_FACTORY.deployModule(_hatId, address(HATS), initData, SALT_NONCE);
+    return CHAINING_ELIGIBILITY_FACTORY.deployModule(_targetHat, address(HATS), initData, SALT_NONCE);
   }
 
   /**
@@ -278,9 +275,8 @@ contract GrantCreator {
 
   /**
    * @dev Builds the constructor arguments for the stream manager contract.
-   * @param _recipientHat The id of the recipient hat.
+   * @param _recipientHat The id of the target hat.
    * @param _cancellerHat The id of the canceller hat.
-   * @param _recipient The address of the recipient.
    * @param _amount The amount of $ZK to grant as a stream.
    * @param _duration The duration of the stream.
    * @return The arguments for the stream manager contract, as a StreamManager.CreationArgs struct.
@@ -288,7 +284,6 @@ contract GrantCreator {
   function _buildStreamManagerCreationArgs(
     uint256 _recipientHat,
     uint256 _cancellerHat,
-    address _recipient,
     uint128 _amount,
     uint40 _duration
   ) internal view returns (StreamManager.CreationArgs memory) {
@@ -299,7 +294,6 @@ contract GrantCreator {
       totalAmount: _amount,
       cliff: 0, // no cliff in this MVP
       totalDuration: _duration,
-      recipient: _recipient,
       recipientHat: _recipientHat,
       cancellerHat: _cancellerHat
     });
@@ -307,25 +301,27 @@ contract GrantCreator {
 
   /**
    * @dev Deploys a new stream manager contract.
-   * @param _hatId The id of the recipient hat.
+   * @param _targetHat The id of the target hat.
    * @param _cancellerHat The id of the canceller hat.
-   * @param _recipient The address of the recipient.
+   * @param _recipientSafe The address of the recipient Safe.
    * @param _amount The amount of $ZK to grant as a stream.
    * @param _duration The duration of the stream.
    * @return The address of the deployed stream manager.
    */
   function _deployStreamManager(
-    uint256 _hatId,
+    uint256 _targetHat,
     uint256 _cancellerHat,
-    address _recipient,
+    address _recipientSafe,
     uint128 _amount,
     uint40 _duration
   ) internal returns (address) {
-    return address(
-      new StreamManager{ salt: bytes32(SALT_NONCE) }(
-        _buildStreamManagerCreationArgs(_hatId, _cancellerHat, _recipient, _amount, _duration)
-      )
+    StreamManager streamManager = new StreamManager{ salt: bytes32(SALT_NONCE) }(
+      _buildStreamManagerCreationArgs(_targetHat, _cancellerHat, _amount, _duration)
     );
+
+    streamManager.setUp(_recipientSafe);
+
+    return address(streamManager);
 
     // TODO post-MVP: make the salt nonce a parameter so that multiple stream managers can be deployed for the same args
   }

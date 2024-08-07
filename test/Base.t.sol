@@ -20,7 +20,8 @@ contract BaseTest is Test {
   IHatsModuleFactory public MULTI_CLAIMS_HATTER_FACTORY;
   uint256 public recipientBranchRoot;
   IZkTokenV2 public ZK;
-  address public ZK_TOKEN_GOVERNOR;
+  address public ZK_TOKEN_GOVERNOR_TIMELOCK;
+  address public ZK_TOKEN_MINTER_ADMIN;
 
   /// @dev config data for the current network, loaded from script/NetworkConfig.json. Foundry will parse that json in
   /// alphabetical order by key, so make sure this struct is defined accordingly.
@@ -50,7 +51,7 @@ contract BaseTest is Test {
 
   function setUp() public virtual {
     network = "zkSyncSepolia";
-    BLOCK_NUMBER = 3_574_400;
+    BLOCK_NUMBER = 3_577_635;
     fork = vm.createSelectFork(vm.rpcUrl(network), BLOCK_NUMBER);
 
     // load the network config
@@ -71,7 +72,8 @@ contract BaseTest is Test {
     HATS = IHats(0x32Ccb7600c10B4F7e678C7cbde199d98453D0e7e);
     LOCKUP_LINEAR = ISablierV2LockupLinear(0x43864C567b89FA5fEE8010f92d4473Bf19169BBA);
     ZK = IZkTokenV2(0x69e5DC39E2bCb1C17053d2A4ee7CAEAAc5D36f96);
-    ZK_TOKEN_GOVERNOR = 0x9F9b6f090AF502c5ffe9d89df13e9DBf83df5Bf7;
+    ZK_TOKEN_GOVERNOR_TIMELOCK = 0x6fEB7Ca79CFD7e1CF761c7Aa8659F24e392fbc7D;
+    ZK_TOKEN_MINTER_ADMIN = 0xD64e136566a9E04eb05B30184fF577F52682D182;
     // HATS = config.Hats;
     // LOCKUP_LINEAR = config.lockupLinear;
     // ZK = config.ZK;

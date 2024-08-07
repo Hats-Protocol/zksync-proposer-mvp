@@ -13,9 +13,9 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.19",
+  solidity: "0.8.22",
   zksolc: {
-    version: "1.4.0",
+    version: "1.5.2",
     settings: {
       optimizer: {
         enabled: true,
