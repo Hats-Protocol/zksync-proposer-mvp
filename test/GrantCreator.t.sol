@@ -180,37 +180,53 @@ contract _DeployAllowlistEligibilty is WithHarnessTest {
   }
 }
 
-// FIXME deploy is failing
+// FIXME predicted address doen't match actual
 contract _DeployChainingEligibilty is WithHarnessTest {
   function test_deployChainingEligibilty() public {
-    agreementOwnerHat = 4;
     recipientHat = 1;
-    accountabilityHat = 2;
-    kycManagerHat = 3;
+    agreementOwnerHat = 2;
+    accountabilityHat = 3;
+    kycManagerHat = 4;
     agreement = "test agreement";
 
-    // address chainingEligibilty = harness.deployChainingEligibilityModule(
-    //   recipientHat, agreementOwnerHat, kycManagerHat, accountabilityHat, agreement
-    // );
-
-    address agreementEligibilityModule =
-      harness.deployAgreementEligibilityModule(recipientHat, agreementOwnerHat, accountabilityHat, agreement);
-    address kycEligibilityModule =
-      harness.deployAllowlistEligibilityModule(recipientHat, kycManagerHat, accountabilityHat);
-
-    bytes memory initData = abi.encode(
-      1, // NUM_CONJUNCTION_CLAUSES
-      2, // CONJUNCTION_CLAUSE_LENGTH
-      agreementEligibilityModule,
-      kycEligibilityModule
+    address chainingEligibilty = harness.deployChainingEligibilityModule(
+      recipientHat, agreementOwnerHat, kycManagerHat, accountabilityHat, agreement
     );
 
-    CHAINING_ELIGIBILITY_FACTORY.deployModule(recipientHat, address(HATS), initData, saltNonce);
+    // predict the agreement eligibility module address
+    bytes memory initData = abi.encode(agreementOwnerHat, accountabilityHat, agreement);
+    address agreementEligibilityModule =
+      AGREEMENT_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE());
 
-    // assertEq(
-    //   chainingEligibilty,
-    //   CHAINING_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE())
-    // );
+    // predict the kyc eligibility module address
+    initData = abi.encode(kycManagerHat, accountabilityHat);
+    address kycEligibilityModule =
+      ALLOWLIST_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE());
+
+    // predict the chaining eligibility module address
+    uint256 clauseCount = 1;
+    uint256[] memory clauseLengths = new uint256[](clauseCount);
+    address[] memory modules = new address[](2);
+    modules[0] = agreementEligibilityModule;
+    modules[1] = kycEligibilityModule;
+    clauseLengths[0] = 2;
+
+    initData = abi.encode(
+      clauseCount, // NUM_CONJUNCTION_CLAUSES
+      clauseLengths,
+      abi.encode(modules)
+    );
+
+    // console2.log(agreementEligibilityModule);
+    // console2.log(kycEligibilityModule);
+    // console2.logBytes(initData);
+
+    // CHAINING_ELIGIBILITY_FACTORY.deployModule(recipientHat, address(HATS), initData, saltNonce);
+
+    assertEq(
+      chainingEligibilty,
+      CHAINING_ELIGIBILITY_FACTORY.getAddress(recipientHat, address(HATS), initData, harness.SALT_NONCE())
+    );
   }
 }
 

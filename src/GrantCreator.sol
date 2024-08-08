@@ -246,11 +246,17 @@ contract GrantCreator {
 
     address kycEligibilityModule = _deployAllowlistEligibilityModule(_targetHat, _allowlistOwnerHat, _arbitratorHat);
 
+    // build the init data
+    uint256[] memory clauseLengths = new uint256[](1);
+    clauseLengths[0] = 2;
+    address[] memory modules = new address[](2);
+    modules[0] = agreementEligibilityModule;
+    modules[1] = kycEligibilityModule;
+
     bytes memory initData = abi.encode(
       1, // NUM_CONJUNCTION_CLAUSES
-      2, // CONJUNCTION_CLAUSE_LENGTH
-      agreementEligibilityModule,
-      kycEligibilityModule
+      clauseLengths,
+      abi.encode(modules)
     );
     return CHAINING_ELIGIBILITY_FACTORY.deployModule(_targetHat, address(HATS), initData, SALT_NONCE);
   }
