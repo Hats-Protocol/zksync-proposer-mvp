@@ -174,6 +174,7 @@ contract StreamManager {
                           INTERNAL FUNCTIONS
   //////////////////////////////////////////////////////////////*/
 
+  /// @dev Will revert if this contract is not authorized as a minter
   function _mintTokens(uint256 _amount) internal {
     IZkTokenV2(address(ZK)).mint(address(this), _amount);
   }
