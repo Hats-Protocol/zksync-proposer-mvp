@@ -63,7 +63,7 @@ contract GrantCreatorHarness is GrantCreator {
     return _deployChainingEligibilityModule(_hatId, _agreementOwnerHat, _allowlistOwnerHat, _arbitratorHat, _agreement);
   }
 
-  function deployHSGAndSafe(uint256 _signersHatId, uint256 _ownerHatId) public returns (address) {
+  function deployHSGAndSafe(uint256 _signersHatId, uint256 _ownerHatId) public returns (address, address) {
     return _deployHSGAndSafe(_signersHatId, _ownerHatId);
   }
 

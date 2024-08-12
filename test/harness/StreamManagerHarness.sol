@@ -7,7 +7,15 @@ import { StreamManager, NotAuthorized, IZkTokenV2, IHats, ISablierV2LockupLinear
 contract StreamManagerHarness is StreamManager {
   uint256 public counter;
 
-  constructor(StreamManager.CreationArgs memory _args) StreamManager(_args) { }
+  constructor(
+    IHats _hats,
+    address _zk,
+    ISablierV2LockupLinear _lockupLinear,
+    uint128 _totalAmount,
+    uint40 _cliff,
+    uint40 _totalDuration,
+    uint256 _cancellerHat
+  ) StreamManager(_hats, _zk, _lockupLinear, _totalAmount, _cliff, _totalDuration, _cancellerHat) { }
 
   function mintTokens(uint256 _amount) public {
     IZkTokenV2(address(ZK)).mint(address(this), _amount);

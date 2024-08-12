@@ -27,15 +27,9 @@ contract StreamManager {
                               EVENTS
   //////////////////////////////////////////////////////////////*/
 
-  event StreamManagerCreated(
-    address asset,
-    uint128 amount,
-    uint40 cliff,
-    uint40 totalDuration,
-    address recipient,
-    uint256 recipientHat,
-    uint256 cancellerHat
-  );
+  event StreamManagerCreated(address asset, uint128 amount, uint40 cliff, uint40 totalDuration, uint256 cancellerHat);
+
+  event RecipientSet(address recipient, uint256 recipientHat);
 
   /*//////////////////////////////////////////////////////////////
                             DATA MODELS
@@ -48,7 +42,6 @@ contract StreamManager {
     uint128 totalAmount;
     uint40 cliff;
     uint40 totalDuration;
-    uint256 recipientHat;
     uint256 cancellerHat;
   }
 
@@ -68,7 +61,6 @@ contract StreamManager {
   uint40 public immutable cliff;
   uint40 public immutable totalDuration;
 
-  uint256 public immutable recipientHat;
   uint256 public immutable cancellerHat;
 
   /*//////////////////////////////////////////////////////////////
@@ -76,23 +68,33 @@ contract StreamManager {
   //////////////////////////////////////////////////////////////*/
 
   address public recipient; // recipientSafe
+  uint256 public recipientHat;
   uint256 public streamId;
 
   /*//////////////////////////////////////////////////////////////
                             CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
 
-  constructor(CreationArgs memory _args) {
-    HATS = _args.hats;
-    ZK = IERC20(_args.zk);
-    LOCKUP_LINEAR = _args.lockupLinear;
-    totalAmount = _args.totalAmount;
-    cliff = _args.cliff;
-    totalDuration = _args.totalDuration;
-    recipientHat = _args.recipientHat;
-    cancellerHat = _args.cancellerHat;
+  constructor(
+    IHats _hats,
+    address _zk,
+    ISablierV2LockupLinear _lockupLinear,
+    uint128 _totalAmount,
+    uint40 _cliff,
+    uint40 _totalDuration,
+    uint256 _cancellerHat
+  ) {
+    HATS = _hats;
+    ZK = IERC20(_zk);
+    LOCKUP_LINEAR = _lockupLinear;
+    totalAmount = _totalAmount;
+    cliff = _cliff;
+    totalDuration = _totalDuration;
+    cancellerHat = _cancellerHat;
 
     DEPLOYER = msg.sender;
+
+    emit StreamManagerCreated(address(ZK), totalAmount, cliff, totalDuration, cancellerHat);
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -118,10 +120,13 @@ contract StreamManager {
                           SETUP FUNCTION
   //////////////////////////////////////////////////////////////*/
 
-  function setUp(address _recipient) public onlyDeployer {
+  function setUp(address _recipient, uint256 _recipientHat) public onlyDeployer {
     recipient = _recipient;
+    recipientHat = _recipientHat;
 
-    emit StreamManagerCreated(address(ZK), totalAmount, cliff, totalDuration, recipient, recipientHat, cancellerHat);
+    emit RecipientSet(_recipient, _recipientHat);
+
+    // TODO post-MVP: make this an initializer function
   }
 
   /*//////////////////////////////////////////////////////////////
