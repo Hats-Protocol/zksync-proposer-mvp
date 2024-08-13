@@ -28,14 +28,15 @@ async function main() {
 
   // console.log(config.Hats);
   const hats = config.Hats;
+  const multiClaimsHatter = config.MultiClaimsHatter;
   const hatsSignerGateFactory = config.HatsSignerGateFactory;
   const chainingEligibilityFactory = config.ChainingEligibilityFactory;
   const agreementEligibilityFactory = config.AgreementEligibilityFactory;
   const allowlistEligibilityFactory = config.AllowlistEligibilityFactory;
   const lockupLinear = config.LockupLinear;
   const zkToken = config.ZKToken;
-  const recipientBranchRoot = config.RecipientBranchRoot;
-  const constructorArgs: any = [hats, hatsSignerGateFactory, chainingEligibilityFactory, agreementEligibilityFactory, allowlistEligibilityFactory, lockupLinear, zkToken, recipientBranchRoot];
+  const recipientBranchRoot = BigInt("53920304716717807407202553798224337504797397839473884972832228638720");
+  const constructorArgs: any = [hats, multiClaimsHatter, chainingEligibilityFactory, agreementEligibilityFactory, allowlistEligibilityFactory, hatsSignerGateFactory, lockupLinear, zkToken, recipientBranchRoot];
 
   const contract = await deployer.loadArtifact(contractName);
 
@@ -49,6 +50,7 @@ async function main() {
       },
     }
   );
+
   console.log(
     "constructor args:" +
     grantCreator.interface.encodeDeploy(constructorArgs)
