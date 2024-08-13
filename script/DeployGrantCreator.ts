@@ -21,12 +21,23 @@ async function main() {
   const deployer = new Deployer(hre, zkWallet);
 
   // get the deployment config for the current network
+  console.log(hre.network.name);
   const configData = require("./NetworkConfig.json");
   const config = configData[hre.network.name];
 
+
+  // console.log(config.Hats);
+  const hats = config.Hats;
+  const hatsSignerGateFactory = config.HatsSignerGateFactory;
+  const chainingEligibilityFactory = config.ChainingEligibilityFactory;
+  const agreementEligibilityFactory = config.AgreementEligibilityFactory;
+  const allowlistEligibilityFactory = config.AllowlistEligibilityFactory;
+  const lockupLinear = config.LockupLinear;
+  const zkToken = config.ZKToken;
+  const recipientBranchRoot = config.RecipientBranchRoot;
+  const constructorArgs: any = [hats, hatsSignerGateFactory, chainingEligibilityFactory, agreementEligibilityFactory, allowlistEligibilityFactory, lockupLinear, zkToken, recipientBranchRoot];
+
   const contract = await deployer.loadArtifact(contractName);
-  console.log(config.Hats);
-  const constructorArgs: any = [config.Hats, config.ChainingEligibilityFactory, config.AgreementEligibilityFactory, config.AllowlistEligibilityFactory, config.HatsSignerGateFactory, config.LockupLinear, config.ZKToken, config.RecipientBranchRoot];
 
   const grantCreator = await deployer.deploy(
     contract,

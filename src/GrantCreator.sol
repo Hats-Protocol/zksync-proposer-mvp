@@ -75,7 +75,7 @@ contract GrantCreator {
   /// @dev Bytecode hash can be found in zkout/StreamManager.sol/StreamManager.json under the hash key.
   /// If deploying with hardhat, need to use the hardhat-compiled address
   bytes32 public constant STREAM_MANAGER_BYTECODE_HASH =
-    0x010001c9d22939a87f30fc5bdf20d069d6e7cb5e0310618223d4636e9ea97920;
+    0x010001ed0ebad6e741ded288b7000ba180b28486ce0f3af06a47b54e69fd7b72;
 
   /*//////////////////////////////////////////////////////////////
                             CONSTRUCTOR

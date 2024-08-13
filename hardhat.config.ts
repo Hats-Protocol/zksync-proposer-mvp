@@ -15,7 +15,7 @@ dotenv.config();
 const config: HardhatUserConfig = {
   solidity: "0.8.22",
   zksolc: {
-    version: "1.5.2",
+    version: "1.4.0",
     settings: {
       optimizer: {
         enabled: true,
@@ -50,7 +50,7 @@ const config: HardhatUserConfig = {
     zkSyncSepolia: {
       zksync: true,
       ethNetwork: "sepolia",
-      url: "https://zksync-sepolia.g.alchemy.com/v2/SECRET",
+      url: `https://zksync-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`,
     },
   },
   defaultNetwork: "zkSyncLocal",

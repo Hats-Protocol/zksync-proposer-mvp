@@ -7,4 +7,4 @@ if (!scriptName) {
   process.exit(1);
 }
 
-execSync(`npx hardhat clean && npx hardhat compile && npx hardhat run script/${scriptName}`, { stdio: 'inherit' });
+execSync(`npx hardhat clean && npx hardhat compile && npx hardhat run script/${scriptName} --network zkSyncLocal`, { stdio: 'inherit' });
