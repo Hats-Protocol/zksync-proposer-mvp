@@ -48,10 +48,10 @@ contract WithInstanceTest is GrantCreatorTest {
     super.setUp();
 
     // set up the hats
-    _createZKSyncHatsTree();
+    // _createZKSyncHatsTree();
 
     // // // deploy the instance
-    grantCreator = _deployGrantCreatorInstance(claimsHatter);
+    grantCreator = _deployGrantCreatorInstance(MULTI_CLAIMS_HATTER);
   }
 }
 
@@ -60,7 +60,9 @@ contract Deployment is WithInstanceTest {
     assertEq(address(grantCreator.ZK()), address(ZK), "incorrect ZK address");
     assertEq(address(grantCreator.LOCKUP_LINEAR()), address(LOCKUP_LINEAR), "incorrect LOCKUP_LINEAR address");
     assertEq(address(grantCreator.HATS()), address(HATS), "incorrect HATS address");
-    assertEq(address(grantCreator.MULTI_CLAIMS_HATTER()), address(claimsHatter), "incorrect claimsHatter address");
+    assertEq(
+      address(grantCreator.MULTI_CLAIMS_HATTER()), address(MULTI_CLAIMS_HATTER), "incorrect MULTI_CLAIMS_HATTER address"
+    );
     assertEq(address(grantCreator.HATS_SIGNER_GATE_FACTORY()), address(HSG_FACTORY), "incorrect HSG_FACTORY address");
     assertEq(
       address(grantCreator.CHAINING_ELIGIBILITY_FACTORY()),
@@ -88,7 +90,7 @@ contract WithHarnessTest is WithInstanceTest {
     super.setUp();
     harness = new GrantCreatorHarness(
       HATS,
-      claimsHatter,
+      MULTI_CLAIMS_HATTER,
       CHAINING_ELIGIBILITY_FACTORY,
       AGREEMENT_ELIGIBILITY_FACTORY,
       ALLOWLIST_ELIGIBILITY_FACTORY,
@@ -270,6 +272,6 @@ contract CreateGrant is WithInstanceTest {
     assertEq(HatsSignerGateLike(hsg).signersHatId(), recipientHatId, "incorrect recipientHat");
 
     // assert that the recipientHat is set as claimableFor
-    assertEq(uint8(claimsHatter.hatToClaimType(recipientHatId)), uint8(ClaimType.ClaimableFor));
+    assertEq(uint8(MULTI_CLAIMS_HATTER.hatToClaimType(recipientHatId)), uint8(ClaimType.ClaimableFor));
   }
 }

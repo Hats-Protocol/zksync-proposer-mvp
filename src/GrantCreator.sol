@@ -274,9 +274,6 @@ contract GrantCreator {
     // build the init data
     uint256[] memory clauseLengths = new uint256[](1);
     clauseLengths[0] = 2;
-    // address[] memory modules = new address[](2);
-    // modules[0] = agreementEligibilityModule;
-    // modules[1] = kycEligibilityModule;
 
     bytes memory initData = abi.encode(
       1, // NUM_CONJUNCTION_CLAUSES

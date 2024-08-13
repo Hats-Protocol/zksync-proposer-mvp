@@ -24,7 +24,8 @@ contract FullFlowTest is WithGrantCreatorTest {
   address public hsg;
   address public recipientSafe;
   StreamManager public streamManager;
-  address public kycOperator = makeAddr("kycOperator");
+  // address public kycOperator = makeAddr("kycOperator");
+  address public kycOperator = 0xf48928b8d6C04122778aD74C64886D972decA39F;
 
   address public whale = 0x624123ec4A9f48Be7AA8a307a74381E4ea7530D4; // balance of 10,050 token
 
@@ -43,9 +44,9 @@ contract FullFlowTest is WithGrantCreatorTest {
     vm.prank(ZK_TOKEN_GOVERNOR_TIMELOCK);
     HATS.mintHat(recipientBranchRoot, address(grantCreator));
 
-    // mint the kyc manager hat to the kyc operator
-    vm.prank(ZK_TOKEN_GOVERNOR_TIMELOCK);
-    HATS.mintHat(kycManagerHat, kycOperator);
+    // // mint the kyc manager hat to the kyc operator
+    // vm.prank(ZK_TOKEN_GOVERNOR_TIMELOCK);
+    // HATS.mintHat(kycManagerHat, kycOperator);
   }
 
   function _encodeGrantMinterRoleCall(address _streamManager) internal view returns (bytes memory) {
@@ -138,10 +139,10 @@ contract FullFlowTest is WithGrantCreatorTest {
     // Vm.Log[] memory logs = vm.getRecordedLogs();
 
     // set the resulting artifacts
-    /// @dev We get most of them from logs from a previous run. This is a hack.
-    _recipientHat = 26_960_358_049_567_167_613_997_040_348_535_609_749_363_938_249_649_595_511_384_550_932_480;
-    _hsg = 0x19b03a5708de8Bf75690fd3AbFd136cc9d223303;
-    _recipientSafe = 0xFD6dC0af2eDaaC3DBeC29944718F78436AB13d5C;
+    /// @dev We get most of them from logs from a previous run using _createGrant(). This is a hack.
+    _recipientHat = 0x0000000200010001000100010000000000000000000000000000000000000000;
+    _hsg = 0x1daf89b739080C3AE23Fb459ea090354d46033De;
+    _recipientSafe = 0xBd30D2f8796160CE04e95d5bD7F80205E4630054;
     _streamManager =
       StreamManager(grantCreator.predictStreamManagerAddress(accountabilityCouncilHat, grantAmount, streamDuration));
 
@@ -234,7 +235,7 @@ contract FullFlowTest is WithGrantCreatorTest {
 
     // the recipient signs the agreement and claims the recipient hat
     vm.prank(_recipient);
-    agreementEligibilityModule.signAgreementAndClaimHat(address(claimsHatter));
+    agreementEligibilityModule.signAgreementAndClaimHat(address(MULTI_CLAIMS_HATTER));
 
     // assert that the recipient is now eligible according to the agreement eligibility module
     (bool eligible, bool standing) = agreementEligibilityModule.getWearerStatus(_recipient, _recipientHat);
@@ -248,6 +249,7 @@ contract FullFlowTest is WithGrantCreatorTest {
   }
 
   function _claimSignerRights(address _recipient) internal {
+    console2.log("starting claimSigner");
     assertEq(HatsSignerGateLike(hsg).signersHatId(), recipientHat, "hsg.signersHatId() != recipientHat");
     vm.prank(_recipient);
     HatsSignerGateLike(hsg).claimSigner();
@@ -369,16 +371,32 @@ contract FullFlow is FullFlowTest {
 
     // execute the grant minter role call via a low level call, from the ZK token governor timelock
     vm.prank(ZK_TOKEN_GOVERNOR_TIMELOCK);
-    (bool success, bytes memory returnData) = address(ZK).call(data);
-
-    console2.log("success", success);
-    console2.logBytes(returnData);
+    (bool success,) = address(ZK).call(data);
 
     assertTrue(success);
   }
 
+  /// @dev Tests the happy path from grant creation (without a proposal) to stream conclusion and withdrawal
+  function test_happy_withoutProposal() public {
+    // create the grant
+    (recipientHat, hsg, recipientSafe, streamManager) = _createGrant();
+    // console2.log("hsg", hsg);
+    // console2.log("recipientSafe", recipientSafe);
+
+    // the recipient passes KYC
+    _passKYC(recipient, recipientHat);
+    // the recipient signs the agreement and claims the recipient hat
+    _signAgreementAndClaimHat(recipient, recipientHat);
+    // the recipient claims its signer rights on the recipient safe
+    _claimSignerRights(recipient);
+    // the recipient starts a stream
+    _createStream(recipient);
+    // after the stream has concluded, the recipient withdraws streamed funds to the recipient safe
+    _withdrawFromStream(recipientSafe, 100 days);
+  }
+
   /// @dev Tests the happy path for the full flow, from proposal creation to stream conclusion and withdrawal
-  function test_happy() public {
+  function test_happy_viaProposal() public {
     // create the grant via proposal
     (recipientHat, hsg, recipientSafe, streamManager) = _submitPassAndExecuteProposal();
     // the recipient passes KYC
