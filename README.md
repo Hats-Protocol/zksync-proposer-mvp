@@ -1,77 +1,94 @@
-# Agreement Eligibility
+# ZKsync Token Proposer MVP
 
-The Agreement Eligibility is a [Hats Protocol](https://github.com/Hats-Protocol/hats-protocol) [module](https://github.com/Hats-Protocol/hats-module) that a community or organization can use to enable individuals to join the community by signing an agreement.
+This repo contains contracts for Hats Protocol's submission to the ZKsync Token Proposer MVP. It contains the following contracts:
 
-When an individual signs the agreement, they also receive a hat that grants them access to the community. If a new agreement is published, community members must sign the new agreement to continue to wear the hat and remain a member of the community.
+- `GrantCreator`: A contract that creates all the components for a new grant. See below for more details.
+- `StreamManager`: One of the components of a grant. It is responsible for minting new tokens and streaming them to the recipient. See below for more details.
 
-## Functionality and Usage
+## Prerequisites
 
-### Deployment and Initialization
+These contracts assume that the following elements are already deployed on ZKsync:
 
-The module is deployed and initialized by the organization. As a Hats Protocol module, it can be deployed via the [Hats Module Factory](https://github.com/Hats-Protocol/hats-module#hatsmodulefactory). When the contract is deployed, the organization must specify the following parameters:
+- Factories for the following Hats modules and peripheral contracts:
+  - Allowlist Eligibility 
+  - Agreement Eligibility
+  - Hats Signer Gate
+- A Multi Claims Hatter instance
+- The ZK Token
+- The ZK Token Governor and associated Timelock
+- The SablierV2LockupLinear contract
+- The Safe proxy factory
+- The Hats Signer Gate Factory
+- A Hats tree (`x`) with the following hats
 
-Immutable parameters:
+  | Hat Name                         | Hat ID    | Wearer                           | Required      |
+  |----------------------------------|-----------|----------------------------------|---------------|
+  | Tophat                           | `x`         | ZK Token Governor Timelock       | exactly as is |
+  | Auto Admin                       | `x.1`       | Multi Claims Hatter instance     | exactly as is |
+  | $ZK Token Controller             | `x.1.1`     | ZK Token Governor Timelock       | exactly as is |
+  | $ZK Grant Funding                | `x.1.1.1`   | Grant Creator instance (to be deployed) | Yes    |
+  | Grants Accountability            | `x.1.1.2`   |                                  | optional      |
+  | Accountability Council           | `x.1.1.2.1` |                                  | Yes           |
+  | Accountability Council Member    | `x.1.1.2.2` |                                  | optional      |
+  | Grants Operations                | `x.1.1.3`   |                                  | optional      |
+  | KYC Service Provider             | `x.1.1.3.1` |                                  | Yes           |
 
-- `hatId` — The hat id for the community hat
 
-Mutable parameters:
+## Grant Creator
 
-- `ownerHat` — The hat id for the owner hat, i.e., the hat whose wearer is authorized to publish new agreements
-- `arbitratorHat` — The hat id for the arbitrator hat, i.e. the hat whose wearer is authorized to revoke the community hat from a given community member
-- `agreement` — The initial agreement, in the form of a hash. This is typically a CID pointing to a file containing the plaintext of the agreement.
+This contract is responsible for creating all the components for a new grant. It does this by...
 
-### Signing the Agreement and Claiming the Community Hat (Anyone)
+1. Creating a new Grant Recipient hat `x.1.1.1.y` and minting it to the specified recipient. The hat has the following properties:
+    - Grant name
+    - Grant agreement, e.g. a URI to a document
+    - Allowlist eligibility module, owned by the KYC Service Provider hat. This is how we ensure that the grant recipient has passed KYC
+    - Agreement eligibility module, with the arbitrator role set to the Accountability Council hat
+    - A chaining eligibility module that combines the above two
 
-Anyone can make themselves eligible for the hat by signing the agreement. There are two options of doing so:
+2. Creating a new Safe and Hats Signer Gate, with the signer hat set as the Grant Recipient hat (1)
 
-1. Signing the agreement and claiming the hat, in one transaction. Doing so involves calling the `signAgreementAndClaimHat` function. The function receives as an input a [Multi Claims Hatter](https://github.com/Hats-Protocol/multi-claims-hatter) instance, which will be used for claiming the hat.
+3. Creating a new Stream Manager instance, with the following properties:
+    - Grant recipient Safe (2) set as the stream receiver
+    - Grant amount
+    - Grant stream duration
+    - The Grant Recipient hat (1) authorized to initiate the stream
+    - The Accountability Council hat authorized to cancel the stream
 
-2. Only signing the agreement, using the `signAgreement` function.
+In order to create the new Grant Recipient hat (1), this contract must wear the $ZK Grant Funding hat `x.1.1.1`.
 
-### Signing a New Agreement (Active Community Members Only)
+This contract is designed to work with the ZK Token Governor by creating a new proposal that calls the `createGrant` function.
 
-When a new agreement is published by the organization (see below), all current wearers of the community hat — i.e., active members of the community — must sign the new agreement within a specified time period to remain a member of the community.
+### Creating a new grant
 
-This specified time period is called the "grace period" and is set by the wearer of the Owner Hat when publishing the new agreement.
+```solidity
+function createGrant(string name, string agreement, uint256 accountabilityJudgeHat, uint256 kycManagerHat, uint128 amount, uint40 streamDuration, address predictedStreamManagerAddress) 
+  external returns (uint256 recipientHat, address hsg, address recipientSafe, address streamManager);
+```
 
-Active community members can sign the new agreement by calling the `signAgreement()` function, which emits an event reflecting the member's "signature" of the new agreement.
+The `predictedStreamManagerAddress` is required to ensure that the Stream Manager instance deployed by this contract is the same one granted the `MINTER_ROLE` in the ZK Token contract. Typically, a proposal will include both the `createGrant` call and the `grantMinterRole` call as separate actions in a multicall. These actions can be executed in the same transaction, but the result of one cannot be used as input to the other. Use the following function to get the predicted Stream Manager address:
 
-### Publishing a New Agreement (Owner Only)
+```solidity
+function predictStreamManagerAddress(uint256 accountabilityJudgeHat, uint128 amount, uint40 streamDuration) external view returns (address);
+```
 
-The wearer of the `ownerHat` can publish a new agreement by calling the `setAgreement()` function. Just like initialization, this involves passing both the `agreement` and `grace` parameters. This action also increments the `currentAgreementId`.
+## Stream Manager
 
-Once a new agreement is set, the grace period begins.
+This contract is responsible for minting new tokens and streaming them to the recipient. It authorizes a specified Grant Recipient hat to initiate a stream, and a specified Accountability Council hat to cancel the stream.
 
-### Revoking a Community Member's Hat (Arbitrator Only)
+To function, it must be authorized to mint new tokens by the ZK Token Governor, ie it must have the `MINTER_ROLE` in the ZK Token contract.
 
-The wearer of the `arbitratorHat` can revoke a community member's hat by calling the `revoke()` function. This function takes a single parameter, `wearer`, which is the address of the community member whose hat is being revoked.
+### Creating a new stream
 
-When a hat is revoked, the hat is burned and the member is placed in badStanding within Hats Protocol. This means that the member is no longer eligible to wear the community hat and cannot re-claim the community hat until the arbitrator places them back in good standing.
+This function can only be called by a wearer of the Grant Recipient hat. It mints new $ZK tokens and starts a stream to the recipient Safe.
 
-### Forgiving a Community Member (Arbitrator Only)
+```solidity
+function createStream() external returns (uint256 streamId);
+```
 
-If an individual's community hat has been revoked, then they are in bad standing. If the wearer of the `arbitratorHat` believes that the individual has made up for the behavior that led to the revocation, they can call the `forgive()` function. This places the individual back in good standing, enabling them to claim the community hat again if they so choose.
+### Cancelling a stream
 
-### Hat Eligibility
+This function can only be called by a wearer of the Accountability Council hat. It cancels the stream and transfers any unstreamed tokens to the specified destination.
 
-This contract also serves as an Eligibility module for the community hat. This means that it implements the `IHatsEligibility` interface, i.e. the `getWearerStatus()` function. This function returns the `eligible` and `standing` status for the given address.
-
-These wearer statuses will differ depending on the scenario, as outlined in the table below.
-
-| Scenario | `eligible` | `standing` |
-| -------- | -------- | -------- |
-| Wearer has claimed the hat and signed the current agreement | true | true |
-| Wearer has claimed the hat; there is a new agreement that the wearer has not signed, but the grace period has not ended | true | true |
-| Wearer has claimed the hat; there is a new agreement that the wearer has not signed, and the grace period has ended | false | true |
-| Wearer has claimed the hat; there is a new agreement that the wearer has signed | true | true |
-| Arbitrator has `revoke()`d the wearer's hat, placing them in bad standing | false | false |
-| Arbitrator has `forgive()`n the wearer after revoking their hat, but they have have not reclaimed the hat | false | true |
-
-## Development
-
-This repo uses Foundry for development and testing. To get started:
-
-1. Fork the project
-2. Install [Foundry](https://book.getfoundry.sh/getting-started/installation)
-3. To compile the contracts, run `forge build`
-4. To test, run `forge test`
+```solidity
+function cancelStream(address refundDestination) external;
+```
