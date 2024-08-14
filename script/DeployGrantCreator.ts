@@ -35,7 +35,7 @@ async function main() {
   const allowlistEligibilityFactory = config.AllowlistEligibilityFactory;
   const lockupLinear = config.LockupLinear;
   const zkToken = config.ZKToken;
-  const recipientBranchRoot = BigInt("53920304716717807407202553798224337504797397839473884972832228638720");
+  const recipientBranchRoot = config.RecipientBranchRoot;
   const constructorArgs: any = [hats, multiClaimsHatter, chainingEligibilityFactory, agreementEligibilityFactory, allowlistEligibilityFactory, hatsSignerGateFactory, lockupLinear, zkToken, recipientBranchRoot];
 
   const contract = await deployer.loadArtifact(contractName);
